@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard - AI Translation System</title>
+    <link rel="stylesheet" href="/css/home.css" />
+    <link rel="stylesheet" href="/css/dashboard.css" />
+    <script src="/js/auth_state.js" defer></script>
+    <script src="/js/languages.js"></script>
+    <script src="/js/populate_languages.js" defer></script>
+    <script src="/js/custom_lang_selects.js" defer></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-container">
+        <div class="nav-logo">
+          <i class="fas fa-language"></i>
+          <span>AI Translator</span>
+        </div>
+        <div class="nav-links">
+          <a href="/" class="nav-link">Trang chủ</a>
+          <a href="#translate" class="nav-link active">Dịch thuật</a>
+          <a href="#history" class="nav-link">Lịch sử</a>
+          <a href="#settings" class="nav-link">Cài đặt</a>
+          <button id="loginBtn" class="btn-login" style="display: none">
+            <i class="fas fa-sign-in-alt"></i> Đăng nhập
+          </button>
+          <button id="logoutBtn" class="btn-login">
+            <i class="fas fa-sign-out-alt"></i> Đăng xuất
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <section class="dashboard">
+      <div class="container">
+        <div class="dashboard-header">
+          <h1>Dashboard</h1>
+        </div>
+
+        <!-- Notification Area -->
+        <div
+          id="notificationArea"
+          class="notification-area"
+          style="display: none"
+        >
+          <div class="notification-content">
+            <i class="fas fa-info-circle"></i>
+            <span id="notificationText"></span>
+            <button onclick="closeNotification()" class="notification-close">
+              &times;
+            </button>
+          </div>
+        </div>
+
+        <div class="dashboard-stats">
+          <div class="stat-card glassmorphism">
+            <div class="stat-icon">
+              <i class="fas fa-language"></i>
+            </div>
+            <div class="stat-content">
+              <h3 id="translationCount">0</h3>
+              <p>Bản dịch hôm nay</p>
+            </div>
+          </div>
+          <div class="stat-card glassmorphism">
+            <div class="stat-icon">
+              <i class="fas fa-file-alt"></i>
+            </div>
+            <div class="stat-content">
+              <h3 id="documentCount">0</h3>
+              <p>Tài liệu đã dịch</p>
+            </div>
+          </div>
+          <div class="stat-card glassmorphism">
+            <div class="stat-icon">
+              <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="stat-content">
+              <h3 id="usagePercent">0%</h3>
+              <p>Đã sử dụng</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-content">
+          <div class="content-tabs">
+            <button class="tab-btn active" onclick="showTab('translate')">
+              Dịch Thuật
+            </button>
+            <button class="tab-btn" onclick="showTab('history')">
+              Lịch Sử
+            </button>
+            <button class="tab-btn" onclick="showTab('upload')">
+              Upload Tài Liệu
+            </button>
+          </div>
+
+          <div id="translate-tab" class="tab-content active">
+            <div class="translation-section">
+              <h2>Dịch Văn Bản</h2>
+              <div class="translation-form">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Ngôn ngữ nguồn:</label>
+                    <select
+                      id="sourceLang"
+                      class="lang-select"
+                      data-placeholder="Nguồn (auto)"
+                      data-autodetect="true"
+                      data-autodetect-label="Tự động phát hiện"
+                    >
+                      <!-- populate_languages.js sẽ thay bằng: placeholder + auto + danh sách đầy đủ -->
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Ngôn ngữ đích:</label>
+                    <select
+                      id="targetLang"
+                      class="lang-select"
+                      data-placeholder="Chọn ngôn ngữ đích"
+                      data-default="vi"
+                    >
+                      <!-- populate_languages.js sẽ thay bằng: placeholder + danh sách đầy đủ (~100 ngôn ngữ) -->
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Văn bản cần dịch:</label>
+                  <textarea
+                    id="inputText"
+                    placeholder="Nhập văn bản cần dịch..."
+                    rows="6"
+                  ></textarea>
+                  <div class="char-count">
+                    <span id="charCount">0</span>/5000 ký tự
+                  </div>
+                </div>
+                <button
+                  id="translateBtn"
+                  class="btn-primary"
+                  onclick="translateText()"
+                >
+                  <i class="fas fa-language"></i>
+                  <span id="translateBtnText">Dịch</span>
+                  <div
+                    id="translateLoading"
+                    class="btn-loading"
+                    style="display: none"
+                  >
+                    <div class="spinner"></div>
+                  </div>
+                </button>
+                <div
+                  id="translationError"
+                  class="error-message"
+                  style="display: none"
+                >
+                  <i class="fas fa-exclamation-triangle"></i>
+                  <span id="errorText"></span>
+                </div>
+                <div
+                  id="translationResult"
+                  class="translation-result"
+                  style="display: none"
+                >
+                  <h3>Kết quả:</h3>
+                  <div id="outputText"></div>
+                  <div class="result-actions">
+                    <button class="btn-secondary" onclick="copyResult()">
+                      <i class="fas fa-copy"></i> Sao chép
+                    </button>
+                    <button class="btn-secondary" onclick="saveTranslation()">
+                      <i class="fas fa-save"></i> Lưu
+                    </button>
+                    <button class="btn-secondary" onclick="downloadResult()">
+                      <i class="fas fa-download"></i> Tải xuống
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="history-tab" class="tab-content">
+            <div class="history-section">
+              <h2>Lịch Sử Dịch Thuật</h2>
+              <div class="history-filters">
+                <select
+                  id="historyFilter"
+                  class="lang-select"
+                  data-placeholder="Lọc ngôn ngữ"
+                >
+                  <option value="all">Tất cả</option>
+                  <option value="text">Văn bản</option>
+                  <option value="document">Tài liệu</option>
+                </select>
+                <input type="date" id="dateFilter" />
+                <button class="btn-secondary" onclick="filterHistory()">
+                  <i class="fas fa-filter"></i> Lọc
+                </button>
+              </div>
+              <div id="historyList" class="history-list">
+                <!-- History items will be loaded here -->
+              </div>
+              <div class="pagination">
+                <button id="prevPage" onclick="changePage(-1)">Trước</button>
+                <span id="pageInfo">Trang 1</span>
+                <button id="nextPage" onclick="changePage(1)">Sau</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="upload-tab" class="tab-content">
+            <div class="upload-section">
+              <h2>Upload Tài Liệu</h2>
+              <div
+                class="upload-area glassmorphism"
+                onclick="document.getElementById('fileInput').click()"
+              >
+                <div class="upload-icon">
+                  <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+                <h3>Click để chọn file hoặc kéo thả vào đây</h3>
+                <p>
+                  Định dạng hỗ trợ: PDF, Word (.docx), Excel (.xlsx), Text
+                  (.txt)
+                </p>
+                <p>Giới hạn: 50MB/file</p>
+                <button class="btn-secondary" style="margin-top: 15px">
+                  <i class="fas fa-folder-open"></i> Chọn File
+                </button>
+                <input
+                  type="file"
+                  id="fileInput"
+                  accept=".pdf,.docx,.xlsx,.txt"
+                  style="display: none"
+                />
+              </div>
+              <div id="fileInfo" class="file-info" style="display: none">
+                <div class="file-details">
+                  <i class="fas fa-file"></i>
+                  <span id="fileName"></span>
+                  <span id="fileSize"></span>
+                </div>
+                <div class="upload-controls">
+                  <select
+                    id="uploadSourceLang"
+                    class="lang-select"
+                    data-autodetect="true"
+                    data-autodetect-label="Tự động (Auto-detect)"
+                    data-placeholder="Ngôn ngữ nguồn"
+                  ></select>
+                  <select
+                    id="uploadTargetLang"
+                    class="lang-select"
+                    data-placeholder="Ngôn ngữ đích"
+                  ></select>
+                  <button
+                    id="uploadBtn"
+                    class="btn-primary"
+                    onclick="uploadDocument()"
+                  >
+                    <i class="fas fa-upload"></i>
+                    <span id="uploadBtnText">Upload & Dịch</span>
+                    <div
+                      id="uploadBtnLoading"
+                      class="btn-loading"
+                      style="display: none"
+                    >
+                      <div class="spinner"></div>
+                    </div>
+                  </button>
+                  <button class="btn-secondary" onclick="clearFile()">
+                    <i class="fas fa-times"></i> Xóa
+                  </button>
+                </div>
+              </div>
+              <div id="uploadError" class="error-message" style="display: none">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span id="uploadErrorText"></span>
+              </div>
+              <div
+                id="uploadProgress"
+                class="upload-progress"
+                style="display: none"
+              >
+                <div class="progress-bar">
+                  <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <p id="progressText">Đang xử lý...</p>
+                <div class="progress-details">
+                  <span id="progressPercent">0%</span>
+                  <span id="progressSpeed">0 MB/s</span>
+                </div>
+              </div>
+              <div
+                id="uploadSuccess"
+                class="success-message"
+                style="display: none"
+              >
+                <i class="fas fa-check-circle"></i>
+                <span id="successText">Upload thành công!</span>
+                <button
+                  class="btn-secondary"
+                  onclick="downloadTranslatedFile()"
+                >
+                  <i class="fas fa-download"></i> Tải file đã dịch
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+      <div class="modal-content glassmorphism">
+        <span class="close" onclick="closeSettingsModal()">&times;</span>
+        <h2>Cài Đặt</h2>
+        <div class="settings-content">
+          <div class="settings-section">
+            <h3><i class="fas fa-user"></i> Thông Tin Cá Nhân</h3>
+            <div class="form-group">
+              <label>Họ tên:</label>
+              <input type="text" id="userFullName" placeholder="Nhập họ tên" />
+            </div>
+            <div class="form-group">
+              <label>Email:</label>
+              <input
+                type="email"
+                id="userEmail"
+                placeholder="Nhập email"
+                readonly
+              />
+            </div>
+            <button class="btn-primary" onclick="updateProfile()">
+              Cập Nhật
+            </button>
+          </div>
+
+          <div class="settings-section">
+            <h3><i class="fas fa-language"></i> Cài Đặt Dịch Thuật</h3>
+            <div class="form-group">
+              <label>Ngôn ngữ mặc định:</label>
+              <select
+                id="defaultTargetLang"
+                class="lang-select"
+                data-placeholder="Ngôn ngữ mặc định"
+              >
+                <option value="vi">Tiếng Việt</option>
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="es">Español</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="autoSave" /> Tự động lưu bản dịch
+              </label>
+            </div>
+            <button class="btn-primary" onclick="saveSettings()">
+              Lưu Cài Đặt
+            </button>
+          </div>
+
+          <div class="settings-section">
+            <h3><i class="fas fa-bell"></i> Thông Báo</h3>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="emailNotifications" checked /> Nhận
+                thông báo qua email
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="translationComplete" checked /> Thông
+                báo khi dịch xong
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/ai_config.js" defer></script>
+    <script src="/js/dashboard.js"></script>
+  </body>
+</html>
