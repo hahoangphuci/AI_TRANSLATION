@@ -1,0 +1,170 @@
+:root {
+  --bg: #0b0f1a;
+  --surface: #0f1724;
+  --accent: #00ffd1;
+  --accent-2: #00a8ff;
+  --accent-glow: rgba(0, 255, 209, 0.18);
+  --accent-2-glow: rgba(0, 168, 255, 0.14);
+  --error-start: #0b0f1a;
+  --error-end: #676767;
+  --error-glow: rgba(139, 0, 0, 0.14);
+  --error-text: #ffd6d6;
+  --text: #e6eef3;
+  --muted: #9aa4b2;
+  --border: rgba(255, 255, 255, 0.06);
+  --glass: rgba(255, 255, 255, 0.03);
+  --radius: 10px;
+}
+
+/* Global application */
+body.theme-dark {
+  /* Keep a neutral dark base on body so lower sections don't pick up hero gradient */
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Replace some common elements */
+nav.navbar,
+.header,
+.nav {
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--border);
+}
+
+.card,
+.panel,
+.glassmorphism,
+.demo-card,
+.quick-translate,
+.feature-card {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.02),
+    rgba(255, 255, 255, 0.01)
+  );
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(3, 9, 18, 0.6);
+}
+
+.btn-primary {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: #021018;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 10px 18px;
+  border: none;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    filter 0.12s ease;
+  box-shadow:
+    0 8px 30px var(--accent-glow),
+    0 4px 12px var(--accent-2-glow),
+    0 2px 6px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+.btn-primary:hover {
+  transform: translateY(-3px) scale(1.01);
+  filter: brightness(1.06);
+  box-shadow:
+    0 12px 40px var(--accent-glow),
+    0 6px 20px var(--accent-2-glow),
+    0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.btn-primary:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(0, 255, 209, 0.06);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+a,
+a:visited,
+.accent {
+  color: var(--accent);
+}
+
+/* Neon highlighted text */
+.highlight {
+  display: inline-block;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 8px 30px var(--accent-glow);
+  font-weight: 700;
+}
+
+/* Small pill background highlight */
+.highlight-bg {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 255, 209, 0.06),
+    rgba(0, 168, 255, 0.04)
+  );
+  padding: 4px 10px;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px var(--accent-glow);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+/* Fancy neon outline */
+.fancy-outline {
+  position: relative;
+}
+.fancy-outline:before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-glow), var(--accent-2-glow));
+  z-index: -1;
+  filter: blur(10px);
+  opacity: 0.95;
+  transition:
+    opacity 0.2s ease,
+    filter 0.2s ease;
+}
+
+/* Error styles (black -> red formula) */
+.error-message,
+.notification.error,
+.notification.error i {
+  background: linear-gradient(90deg, var(--error-start), var(--error-end));
+  border: 1px solid rgba(139, 0, 0, 0.28);
+  color: var(--error-text);
+  box-shadow: 0 8px 30px var(--error-glow);
+}
+.error-message {
+  padding: 12px 16px;
+  border-radius: 8px;
+}
+.error-message strong {
+  color: var(--error-text);
+}
+
+/* Small responsive tweaks */
+@media (max-width: 768px) {
+  .hero {
+    padding: 20px 10px;
+  }
+  .hero-image {
+    display: none;
+  }
+}

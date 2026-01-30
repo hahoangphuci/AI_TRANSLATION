@@ -42,11 +42,11 @@
       if (cur) {
         sel.value = cur;
       }
-      // If this is the upload target select and no prior value, default to Vietnamese
-      if (
-        !cur &&
-        (sel.id === "uploadTargetLang" || sel.dataset.default === "vi")
-      ) {
+      // If this is the upload target select and no prior value, default to English (so uploaded files are translated)
+      if (!cur && sel.id === "uploadTargetLang") {
+        sel.value = "en";
+      } else if (!cur && sel.dataset.default === "vi") {
+        // legacy behaviour: default to Vietnamese for other selects marked with data-default="vi"
         sel.value = "vi";
       }
     });

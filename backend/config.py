@@ -23,7 +23,7 @@ class Config:
     # OpenRouter / AI Integration
     OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
     AI_PROVIDER = os.getenv('AI_PROVIDER', 'openrouter')
-    AI_MODEL = os.getenv('AI_MODEL', 'openai/gpt-4o-mini')
+    AI_MODEL = os.getenv('AI_MODEL', 'nvidia/nemotron-3-nano-30b-a3b:free')
     AI_AVAILABLE_MODELS = os.getenv('AI_AVAILABLE_MODELS', '')
     AI_ENDPOINTS = {
         'chat': os.getenv('AI_ENDPOINT_CHAT'),

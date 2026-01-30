@@ -5,7 +5,10 @@ import threading
 import uuid
 import time
 from dotenv import load_dotenv
-from app.services.file_service import FileService
+from app.services.file_service import FileService, ProviderRateLimitError
+from deep_translator import MyMemoryTranslator, GoogleTranslator
+import requests
+import urllib.parse
 
 # Load .env từ thư mục backend (app/services -> app -> backend)
 _backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -99,17 +102,22 @@ class TranslationService:
         if source_lang and source_lang != 'auto':
             src_name = CODE_TO_NAME.get(source_lang.lower(), source_lang)
             system_prompt = f"You are a professional translator. Translate the following text from {src_name} to {target_name}. Only return the translated text, nothing else."
-        response = self.openai_client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text}
-            ],
-            max_tokens=4096,
-            temperature=0
-        )
-        content = response.choices[0].message.content
-        return (content or "").strip()
+        try:
+            # Use a safe max_tokens to avoid exceeding account credit limits
+            response = self.openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text}
+                ],
+                max_tokens=2048,
+                temperature=0
+            )
+            content = response.choices[0].message.content
+            return (content or "").strip()
+        except Exception as e:
+            # Surface API errors with their message so the caller can detect credit or rate issues
+            raise RuntimeError(f"AI translation failed: {e}") from e
 
     def translate_text(self, text, source_lang, target_lang):
         if target_lang is None or not str(target_lang).strip():
@@ -117,42 +125,48 @@ class TranslationService:
         if text is None:
             return ""
         target_lang = str(target_lang).strip()
-        source_lang = (str(source_lang).strip() if source_lang is not None else 'auto') or 'auto'
+        source = (str(source_lang).strip() if source_lang is not None else 'auto') or 'auto'
         t = target_lang.lower()
+        s = source.lower()
 
-        # 1) Thử DeepL CHỈ KHI ngôn ngữ đích nằm trong danh sách DeepL hỗ trợ
-        if self.deepl_translator and t in DEEPL_TARGET_MAP:
-            try:
-                dl_target = DEEPL_TARGET_MAP[t]
-                result = self.deepl_translator.translate_text(text, target_lang=dl_target)
-                return result.text
-            except Exception as e:
-                print(f"DeepL failed for {t}: {e}, falling back to AI")
-
-        # 2) Dùng OpenAI/OpenRouter: cho ngôn ngữ DeepL không hỗ trợ HOẶC khi DeepL lỗi
-        last_error = None
+        # Only use OpenAI/OpenRouter (ChatGPT gpt-4o) for translations — no public or DeepL fallbacks.
+        if not self.openai_client:
+            raise RuntimeError("AI provider not configured: set OPENAI_API_KEY or OPENROUTER_API_KEY in backend/.env")
         try:
-            out = self._openai_translate(text, source_lang, target_lang, t)
-            if out is not None:
+            out = self._openai_translate(text, source, target_lang, t)
+            if out is not None and out != "":
                 return out
+            else:
+                raise RuntimeError("AI translation returned empty result")
         except Exception as e:
-            last_error = e
             import traceback
             traceback.print_exc()
-            print(f"AI translation failed: {e}")
-
-        msg = (
-            "Không thể dịch: cấu hình DEEPL_API_KEY và/hoặc (OPENAI_API_KEY hoặc OPENROUTER_API_KEY) trong backend/.env. "
-            "Với ngôn ngữ DeepL không hỗ trợ, cần OPENAI hoặc OPENROUTER. "
-        )
-        if last_error:
-            msg += f" Lỗi API: {last_error}"
-        raise RuntimeError(msg)
+            raise RuntimeError(f"AI translation failed: {e}")
     
     def translate_document(self, file_path, target_lang):
         # Synchronous translation (kept for compatibility)
         return self.file_service.process_document(file_path, target_lang)
 
+    def _check_provider_available(self):
+        """Lightweight preflight check to see if the configured AI provider is available.
+
+        Returns (True, None) if OK, otherwise (False, message) if rate-limited or clearly unavailable.
+        """
+        if not self.openai_client:
+            return (False, 'No AI provider configured: set OPENAI_API_KEY or OPENROUTER_API_KEY')
+        try:
+            # Call models.list to surface rate-limit errors quickly
+            _ = self.openai_client.models.list()
+            return (True, None)
+        except Exception as e:
+            err = str(e).lower()
+            if '429' in err or '402' in err or 'rate' in err or 'insufficient' in err or 'free-models' in err or 'credit' in err:
+                # Rate-limited or insufficient credits — abort early so background job fails fast
+                print(f"AI provider preflight check indicates rate limit/insufficient credits: {e}.")
+                return (False, str(e))
+            # Non-rate errors: report as unavailable
+            print(f"AI provider preflight check returned non-rate error: {e}")
+            return (False, str(e))
     def translate_document_background(self, file_path, target_lang, user_id=None):
         job_id = str(uuid.uuid4())
         self.jobs[job_id] = {
@@ -163,6 +177,14 @@ class TranslationService:
             'error': None,
             'user_id': user_id
         }
+        # Preflight provider availability: fail early for rate limit/insufficient credits
+        available, message = self._check_provider_available()
+        if not available:
+            self.jobs[job_id]['status'] = 'failed'
+            self.jobs[job_id]['progress'] = 0
+            self.jobs[job_id]['message'] = 'Failed - AI provider rate-limited or unavailable'
+            self.jobs[job_id]['error'] = str(message)
+            return job_id
 
         def _worker(job_id, file_path, target_lang):
             try:
@@ -194,6 +216,10 @@ class TranslationService:
 
                 self.jobs[job_id]['progress'] = 100
                 self.jobs[job_id]['status'] = 'completed'
+            except ProviderRateLimitError as e:
+                self.jobs[job_id]['status'] = 'failed'
+                self.jobs[job_id]['error'] = str(e)
+                self.jobs[job_id]['message'] = 'Failed - Provider rate limit'
             except Exception as e:
                 self.jobs[job_id]['status'] = 'failed'
                 self.jobs[job_id]['error'] = str(e)
