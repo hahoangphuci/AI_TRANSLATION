@@ -2,15 +2,8 @@
 window.AI_CONFIG = window.AI_CONFIG || {
   API_KEY: null, // Giữ null – key chỉ ở backend (.env OPENROUTER_API_KEY)
   PROVIDER: "openrouter",
-  MODEL: "openai/gpt-4o-mini",
-  AVAILABLE_MODELS: [
-    "openai/gpt-4o",
-    "openai/gpt-4o-mini",
-    "google/gemini-2.0-flash-exp:free",
-    "google/gemini-pro",
-    "anthropic/claude-3-haiku",
-    "meta-llama/llama-3.1-8b-instruct:free",
-  ],
+  MODEL: "openai/gpt-4o",
+  AVAILABLE_MODELS: ["openai/gpt-4o"],
   ENDPOINTS: {
     chat: "https://openrouter.ai/api/v1/chat/completions",
     models: "https://openrouter.ai/api/v1/models",

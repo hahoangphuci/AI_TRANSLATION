@@ -282,7 +282,7 @@ class TranslationManager {
       charCount.textContent = count;
 
       if (count > 5000) {
-        charCount.style.color = "#ff6b6b";
+        charCount.style.color = "#00A8FF";
       } else {
         charCount.style.color = "rgba(255, 255, 255, 0.7)";
       }
@@ -338,7 +338,7 @@ class TranslationManager {
         throw new Error(
           errorData.error ||
             errorData.message ||
-            "Dịch thất bại. Kiểm tra API key (DEEPL/OPENAI/OPENROUTER) trong .env.",
+            "Dịch thất bại. Kiểm tra API key (OPENAI/OPENROUTER) trong .env.",
         );
       }
 
@@ -644,7 +644,7 @@ class FileUploadManager {
         throw new Error(
           errorData.error ||
             errorData.message ||
-            "Upload thất bại. Kiểm tra API key (DEEPL/OPENAI/OPENROUTER) trong .env.",
+            "Upload thất bại. Kiểm tra API key (OPENAI/OPENROUTER) trong .env.",
         );
       }
 
@@ -1130,7 +1130,9 @@ style.textContent = `
     }
 
     .notification.error {
-        border-color: #f44336;
+        border-color: rgba(139,0,0,0.35);
+        background: linear-gradient(90deg, #0B0F1A, #6B0000);
+        box-shadow: 0 8px 30px rgba(139,0,0,0.12);
     }
 
     .upload-area.drag-over {

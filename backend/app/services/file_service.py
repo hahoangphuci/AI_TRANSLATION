@@ -1,6 +1,7 @@
 import os
 import re
 import unicodedata
+import time
 import PyPDF2
 import docx
 import openpyxl
@@ -13,14 +14,71 @@ except Exception:
     HAS_FPDF = False
 from werkzeug.utils import secure_filename
 
+
+class ProviderRateLimitError(Exception):
+    """Raised when the upstream AI provider indicates a hard rate limit (429 or insufficient credits)."""
+    pass
+
 class FileService:
     def __init__(self, translator=None):
         """translator: callable(text, source_lang, target_lang) -> translated_text"""
+        from concurrent.futures import ThreadPoolExecutor
+
         self.upload_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'uploads')
         self.download_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'downloads')
         os.makedirs(self.upload_folder, exist_ok=True)
         os.makedirs(self.download_folder, exist_ok=True)
         self.translator = translator
+        # Performance tuning
+        try:
+            from app import config as app_config
+            self.concurrency = getattr(app_config.Config, 'TRANSLATION_CONCURRENCY', 4)
+            self.retries = getattr(app_config.Config, 'TRANSLATION_RETRIES', 3)
+            self.backoff = getattr(app_config.Config, 'TRANSLATION_BACKOFF', 1.5)
+        except Exception:
+            self.concurrency = int(os.getenv('TRANSLATION_CONCURRENCY', '4'))
+            self.retries = int(os.getenv('TRANSLATION_RETRIES', '3'))
+            self.backoff = float(os.getenv('TRANSLATION_BACKOFF', '1.5'))
+        self._executor_cls = ThreadPoolExecutor
+
+    def _translate_with_retry(self, text, target_lang):
+        """Translate a piece of text with retry/backoff on transient errors.
+
+        IMPORTANT: If a provider rate-limit or "insufficient credits" error is encountered,
+        fail fast by raising ProviderRateLimitError so the calling job can abort immediately
+        instead of continuing and wasting quota/retries.
+        """
+        if not self.translator:
+            raise RuntimeError('Translator not configured')
+        last = None
+        attempt = 0
+        max_attempts = max(1, self.retries)
+        while attempt < max_attempts:
+            try:
+                out = self.translator(text, 'auto', target_lang)
+                return out
+            except Exception as e:
+                last = e
+                err = str(e).lower()
+                # Fail fast for provider rate limits or insufficient credits
+                if any(k in err for k in ('rate', 'insufficient', 'free-models', '402', 'credit', 'requires more credits')):
+                    try:
+                        print(f"Provider rate limit or insufficient credits encountered: {e}")
+                    except UnicodeEncodeError:
+                        print("Provider rate limit encountered: ", repr(e))
+                    raise ProviderRateLimitError(str(e))
+                # Retry on transient network errors
+                if any(k in err for k in ('temporarily', 'timed out', 'timeout', 'connection')):
+                    sleep_time = (self.backoff ** attempt)
+                    print(f"Translate retry {attempt+1}/{self.retries} after {sleep_time}s due to: {e}")
+                    time.sleep(sleep_time)
+                    attempt += 1
+                    continue
+                # Non-retryable errors: break
+                break
+        # Final attempt to raise helpful error
+        raise last
+
     
     def process_document(self, file_path, target_lang, progress_callback=None):
         filename = os.path.basename(file_path)
@@ -49,7 +107,21 @@ class FileService:
         
             if progress_callback:
                 progress_callback(25, "Translating PDF text...")
-            translated_text = self._translate_text(text, target_lang)
+            # Split by pages (already done) and translate pages in parallel
+            pages = text.split('\f') if '\f' in text else text.split('\n\f') if '\n\f' in text else text.split('\n\n')
+            with self._executor_cls(max_workers=self.concurrency) as ex:
+                futures = [ex.submit(self._translate_with_retry, p, target_lang) for p in pages]
+                translated_pages = []
+                for fut in futures:
+                    try:
+                        translated_pages.append(fut.result())
+                    except ProviderRateLimitError:
+                        print("Provider rate limit detected during PDF page translation, aborting job.")
+                        raise
+                    except Exception as e:
+                        print(f"PDF page translation failed: {e}")
+                        translated_pages.append('')
+            translated_text = '\n\n'.join(translated_pages)
 
         # If FPDF is available, build a PDF; otherwise fallback to a TXT file (no layout preservation)
         if HAS_FPDF and FPDF:
@@ -160,6 +232,10 @@ class FileService:
 
             try:
                 translated_para = self._translate_text(paragraph_text, target_lang)
+            except ProviderRateLimitError:
+                # Critical: if provider is rate-limited stop the entire document job
+                print("Provider rate limit detected during paragraph translation, raising to abort job.")
+                raise
             except Exception as e:
                 print(f"Translator failed for paragraph: {e}")
                 translated_para = paragraph_text
@@ -173,8 +249,33 @@ class FileService:
         # Body paragraphs
         paragraphs = [p for p in doc.paragraphs]
         total = len(paragraphs) if paragraphs else 1
-        for idx, para in enumerate(paragraphs):
-            translate_paragraph_runs(para, idx, total)
+        # Translate in parallel using ThreadPoolExecutor
+        with self._executor_cls(max_workers=self.concurrency) as ex:
+            futures = {}
+            for idx, para in enumerate(paragraphs):
+                # capture original run texts
+                runs_texts = [r.text or "" for r in para.runs]
+                paragraph_text = "".join(runs_texts)
+                if not paragraph_text.strip():
+                    continue
+                futures[ex.submit(self._translate_with_retry, paragraph_text, target_lang)] = (idx, para, runs_texts)
+
+            completed = 0
+            for fut in list(futures):
+                try:
+                    res = fut.result()
+                    idx, para, runs_texts = futures[fut]
+                    pieces = distribute_text_to_runs(res, runs_texts)
+                    for run, piece in zip(list(para.runs), pieces):
+                        run.text = piece
+                except ProviderRateLimitError as e:
+                    print("Provider rate limit detected during paragraph processing, aborting job.")
+                    raise
+                except Exception as e:
+                    print(f"Paragraph translation failed: {e}")
+                completed += 1
+                if progress_callback:
+                    progress_callback(10 + int((completed / max(1, total)) * 70), f"Translating paragraph {completed}/{total}")
 
         # Tables: translate cell-by-cell, preserve cell formatting
         for table in doc.tables:
@@ -248,12 +349,12 @@ class FileService:
                 total_cells += 1
         total_cells = total_cells or 1
 
-        processed = 0
+        # Collect cells to translate
+        to_translate = []
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
             for row in ws.iter_rows():
                 for cell in row:
-                    # Keep formulas intact (cell.data_type == 'f' or string startswith '=')
                     try:
                         is_formula = (cell.data_type == 'f') or (
                             isinstance(cell.value, str) and cell.value.startswith("=")
@@ -262,14 +363,26 @@ class FileService:
                         is_formula = False
 
                     if (not is_formula) and isinstance(cell.value, str) and cell.value.strip():
-                        cell.value = self._translate_text(cell.value, target_lang)
+                        to_translate.append(cell)
 
-                    processed += 1
-                    if progress_callback:
-                        progress_callback(
-                            10 + int((processed / total_cells) * 80),
-                            f"Translating cells {processed}/{total_cells}",
-                        )
+        total = len(to_translate) or 1
+        processed = 0
+        # Translate cells in parallel
+        with self._executor_cls(max_workers=self.concurrency) as ex:
+            futures = {ex.submit(self._translate_with_retry, cell.value, target_lang): cell for cell in to_translate}
+            for fut in futures:
+                try:
+                    translated = fut.result()
+                    cell = futures[fut]
+                    cell.value = translated
+                except ProviderRateLimitError:
+                    print("Provider rate limit detected during cell translation, aborting job.")
+                    raise
+                except Exception as e:
+                    print(f"Cell translation failed: {e}")
+                processed += 1
+                if progress_callback:
+                    progress_callback(10 + int((processed / total) * 80), f"Translating cells {processed}/{total}")
 
         # Ensure output filename has .xlsx extension
         output_filename = f"translated_{os.path.basename(file_path)}"
@@ -286,7 +399,55 @@ class FileService:
             text = f.read()
         if progress_callback:
             progress_callback(25, "Translating text file...")
-        translated_text = self._translate_text(text, target_lang)
+
+        # Split into paragraphs then chunk long paragraphs to avoid provider length limits
+        paras = [p.strip() for p in re.split(r'\n{2,}', text) if p.strip()]
+        max_chars = 3000
+        chunks = []
+        for p in paras:
+            if len(p) <= max_chars:
+                chunks.append(p)
+            else:
+                parts = re.split(r'(?<=[.!?])\s+', p)
+                cur = ''
+                for part in parts:
+                    if len(cur) + len(part) + 1 <= max_chars:
+                        cur = (cur + ' ' + part).strip() if cur else part
+                    else:
+                        if cur:
+                            chunks.append(cur)
+                        cur = part
+                if cur:
+                    # If still too long, slice it
+                    while len(cur) > max_chars:
+                        chunks.append(cur[:max_chars])
+                        cur = cur[max_chars:]
+                    if cur:
+                        chunks.append(cur)
+
+        # Translate chunks in parallel
+        translated_parts = []
+        with self._executor_cls(max_workers=self.concurrency) as ex:
+            futures = [ex.submit(self._translate_with_retry, c, target_lang) for c in chunks]
+            total = len(futures) or 1
+            for i, fut in enumerate(futures, start=1):
+                try:
+                    res = fut.result()
+                    translated_parts.append(res)
+                except ProviderRateLimitError as e:
+                    try:
+                        print("Provider rate limit detected during text file translation, aborting job.")
+                    except UnicodeEncodeError:
+                        print("Provider rate limit detected during text file translation, aborting job.")
+                    raise
+                except Exception as e:
+                    print(f"Chunk translation failed: {e}")
+                    translated_parts.append('')
+                if progress_callback:
+                    progress_callback(25 + int((i / total) * 70), f"Translating chunk {i}/{total}")
+
+        translated_text = '\n\n'.join(translated_parts)
+
         output_filename = f"translated_{os.path.basename(file_path)}"
         if not output_filename.lower().endswith('.txt'):
             output_filename += '.txt'
@@ -312,8 +473,8 @@ class FileService:
         return text
 
     def _translate_text(self, text, target_lang):
-        # Use injected translator; propagate errors so caller can report properly.
+        # Use injected translator with retry/backoff
         if self.translator:
-            out = self.translator(text, 'auto', target_lang)
+            out = self._translate_with_retry(text, target_lang)
             return self._sanitize_text(out)
         raise RuntimeError("Translator is not configured")
