@@ -207,10 +207,10 @@ body {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: -1px;
-    height: 160px;
+    bottom: 0;
+    height: 220px; /* larger fade for smoother blend */
     z-index: 1;
-    background: linear-gradient(to bottom, rgba(11,28,36,0) 0%, var(--bg) 100%);
+    background: linear-gradient(to bottom, rgba(11,28,36,0) 0%, rgba(11,15,26,1) 100%); /* fade into exact body bg */
     pointer-events: none;
 }
 
@@ -454,7 +454,7 @@ select.lang-select::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.3); borde
 .features {
     padding: 80px 0;
     min-height: 480px;
-    background: rgba(255, 255, 255, 0.05);
+    background: transparent; /* use body background for smooth transition */
 }
 
 .section-title {
@@ -515,7 +515,7 @@ select.lang-select::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.3); borde
 /* Pricing Section */
 .pricing {
     padding: 100px 0;
-    background: rgba(255, 255, 255, 0.02);
+    background: transparent; /* avoid visible banding under hero */
 }
 
 .pricing-grid {
@@ -704,10 +704,11 @@ select.lang-select::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.3); borde
 /* CTA Section */
 .cta {
     padding: 80px 0;
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
+    min-height: 320px;
+    background: transparent; /* keep same base as body for smooth flow */
+    border-top: none;
+    border-bottom: none;
+} 
 
 .cta-content {
     text-align: center;
