@@ -6,19 +6,40 @@ document.addEventListener("DOMContentLoaded", function () {
   const bioInput = document.getElementById("profile-bio");
   const msg = document.getElementById("profile-message");
 
-  // Load from localStorage if available
-  try {
-    const user = localStorage.getItem("user");
-    if (user) {
-      const u = JSON.parse(user);
-      if (u.name) nameInput.value = u.name;
-      if (u.email) emailInput.value = u.email;
-      if (u.avatarUrl) avatarInput.value = u.avatarUrl;
-      if (u.bio) bioInput.value = u.bio;
+  async function loadProfileFromBackendIfPossible() {
+    const token = localStorage.getItem("token");
+    if (!token || String(token).startsWith("fake")) return null;
+
+    try {
+      const res = await fetch("/api/auth/profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.warn("Failed to fetch /api/auth/profile", e);
+      return null;
     }
-  } catch (e) {
-    console.error(e);
   }
+
+  (async () => {
+    let local = null;
+    try {
+      const user = localStorage.getItem("user");
+      local = user ? JSON.parse(user) : null;
+    } catch (e) {
+      local = null;
+    }
+
+    const remote = await loadProfileFromBackendIfPossible();
+    const merged = { ...(local || {}), ...(remote || {}) };
+    if (remote) localStorage.setItem("user", JSON.stringify(merged));
+
+    if (merged.name) nameInput.value = merged.name;
+    if (merged.email) emailInput.value = merged.email;
+    if (merged.avatarUrl) avatarInput.value = merged.avatarUrl;
+    if (merged.bio) bioInput.value = merged.bio;
+  })();
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
