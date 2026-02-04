@@ -1,5 +1,8 @@
 // auth.js - Authentication page JavaScript
 document.addEventListener("DOMContentLoaded", function () {
+  // Check for Google OAuth callback
+  checkGoogleOAuthResponse();
+
   initializeAuthPage();
 });
 
@@ -9,8 +12,10 @@ function initializeAuthPage() {
     setupPasswordToggles();
     setupPasswordStrength();
     setupFormValidation();
-    loadGoogleAuth();
     checkUrlParameters();
+
+    // Initialize Google Sign-In with new library
+    setTimeout(initializeGoogleSignIn, 500);
   } catch (e) {
     console.error("Auth initialization error:", e);
   }
@@ -377,44 +382,206 @@ async function handleRegister(event) {
 }
 
 function loadGoogleAuth() {
-  // Load Google Sign-In API
-  if (typeof gapi !== "undefined") {
-    gapi.load("auth2", function () {
-      gapi.auth2.init({
-        client_id: "YOUR_GOOGLE_CLIENT_ID",
-      });
+  // DEPRECATED - using new Google Sign-In library instead
+  console.log("loadGoogleAuth() deprecated - use initializeGoogleSignIn()");
+}
+
+function initializeGoogleSignIn() {
+  // Initialize Google Sign-In with new library (google.accounts.id)
+  if (typeof google === "undefined" || !google.accounts) {
+    console.warn("Google Sign-In library not ready, retrying...");
+    setTimeout(initializeGoogleSignIn, 500);
+    return;
+  }
+
+  try {
+    const clientId = window.GOOGLE_CLIENT_ID;
+
+    if (!clientId) {
+      console.error("GOOGLE_CLIENT_ID not configured");
+      showAuthMessage("Google Client ID chưa được cấu hình", "error");
+      return;
+    }
+
+    console.log(
+      "Initializing Google Sign-In with clientId:",
+      clientId.substring(0, 20) + "...",
+    );
+
+    google.accounts.id.initialize({
+      client_id: clientId,
+      callback: handleGoogleSignInCallback,
     });
+
+    console.log("Google Sign-In initialized successfully");
+  } catch (e) {
+    console.error("Error initializing Google Sign-In:", e);
+    showAuthMessage("Lỗi khởi tạo Google Sign-In: " + e.message, "error");
   }
 }
 
+function handleGoogleSignInCallback(response) {
+  console.log("Google Sign-In response received");
+
+  if (!response.credential) {
+    console.error("No credential in response");
+    showAuthMessage("Không nhận được token từ Google", "error");
+    return;
+  }
+
+  const id_token = response.credential;
+
+  // Send token to backend
+  sendGoogleTokenToBackend(id_token);
+}
+
 function signInWithGoogle() {
-  if (typeof gapi !== "undefined" && gapi.auth2) {
-    const auth2 = gapi.auth2.getAuthInstance();
-    auth2
-      .signIn()
-      .then(function (googleUser) {
-        const profile = googleUser.getBasicProfile();
-        console.log("Google sign in successful:", profile.getName());
+  console.log("signInWithGoogle called - using Authorization Code flow");
 
-        // Here you would send the Google token to your backend
-        // For now, simulate successful login
-        localStorage.setItem("token", "fake-google-jwt-token");
-        localStorage.setItem(
-          "user",
-          JSON.stringify({ name: profile.getName() }),
+  // Request authorization URL from backend
+  fetch("/api/auth/google/authorize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (data.auth_url) {
+        console.log(
+          "Redirecting to Google OAuth:",
+          data.auth_url.substring(0, 100) + "...",
         );
-        showAuthMessage("Đăng nhập Google thành công!", "success");
+        window.location.href = data.auth_url;
+      } else {
+        showAuthMessage(
+          "Không thể lấy URL xác thực từ Google: " + (data.error || "unknown"),
+          "error",
+        );
+      }
+    })
+    .catch((e) => {
+      console.error("Error getting auth URL:", e);
+      showAuthMessage("Lỗi kết nối backend: " + e.message, "error");
+    });
+}
 
-        setTimeout(() => {
-          window.location.href = "dashboard.html";
-        }, 1000);
+function generateNonce() {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode.apply(null, array));
+}
+
+function handleGooglePopupMessage(event) {
+  if (event.origin !== window.location.origin) return;
+
+  if (event.data && event.data.type === "google-signin") {
+    sendGoogleTokenToBackend(event.data.idToken);
+    window.removeEventListener("message", handleGooglePopupMessage);
+  }
+}
+
+// Check for Google OAuth response in URL (token in query params)
+function checkGoogleOAuthResponse() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+
+  if (token) {
+    console.log("Found token in URL from OAuth callback");
+    localStorage.setItem("token", token);
+
+    // Fetch user profile
+    fetch("/api/auth/profile", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((profile) => {
+        localStorage.setItem("user", JSON.stringify(profile));
+        console.log("User profile loaded:", profile.email);
+
+        // Clean URL and stay on dashboard
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname,
+        );
       })
-      .catch(function (error) {
-        console.error("Google sign in error:", error);
-        showAuthMessage("Đăng nhập Google thất bại", "error");
+      .catch((e) => {
+        console.warn("Could not fetch profile:", e);
+        // Even if profile fetch fails, token is saved
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname,
+        );
       });
-  } else {
-    showAuthMessage("Google Sign-In chưa được tải. Vui lòng thử lại.", "error");
+  }
+
+  // Check for OAuth errors
+  const error = params.get("error");
+  if (error) {
+    console.error("OAuth error:", error);
+    showAuthMessage("Lỗi đăng nhập Google: " + error, "error");
+  }
+}
+
+async function sendGoogleTokenToBackend(id_token) {
+  showAuthMessage("Đang xác thực...", "info");
+
+  try {
+    console.log(
+      "Sending token to /api/auth/google:",
+      id_token.substring(0, 50) + "...",
+    );
+
+    const res = await fetch("/api/auth/google", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: id_token }),
+    });
+
+    console.log("Response status:", res.status);
+    const responseText = await res.text();
+    console.log("Response text:", responseText);
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      console.error("Failed to parse response as JSON:", e);
+      showAuthMessage(
+        "Lỗi phản hồi từ backend (không phải JSON): " +
+          responseText.substring(0, 100),
+        "error",
+      );
+      return;
+    }
+
+    if (res.ok && data.access_token) {
+      // Save app JWT
+      localStorage.setItem("token", data.access_token);
+
+      // Fetch user profile
+      const profileRes = await fetch("/api/auth/profile", {
+        headers: { Authorization: `Bearer ${data.access_token}` },
+      });
+
+      if (profileRes.ok) {
+        const profile = await profileRes.json();
+        localStorage.setItem("user", JSON.stringify(profile));
+      }
+
+      showAuthMessage("Đăng nhập Google thành công!", "success");
+      setTimeout(() => {
+        window.location.href = "dashboard.html";
+      }, 800);
+    } else {
+      showAuthMessage(
+        data.error || "Đăng nhập thất bại: " + res.status,
+        "error",
+      );
+    }
+  } catch (error) {
+    console.error("Backend auth error:", error);
+    showAuthMessage("Lỗi kết nối backend: " + error.message, "error");
   }
 }
 

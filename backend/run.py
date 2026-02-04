@@ -21,6 +21,9 @@ STATIC_DIR = FRONTEND_DIR
 app = Flask(__name__, static_folder=os.path.join(FRONTEND_DIR, ''))
 CORS(app)
 
+# Configure session for OAuth flow
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+
 # Load config
 app.config.from_object('config.DevelopmentConfig')
 
@@ -33,6 +36,19 @@ init_jwt(app)
 # Create database tables
 with app.app_context():
     db.create_all()
+
+    # Schema migration for MySQL compatibility
+    try:
+        if db.engine.dialect.name == 'mysql':
+            from sqlalchemy import text
+            with db.engine.begin() as conn:
+                # Check if avatar_url column exists in user table
+                result = conn.execute(text("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='user' AND COLUMN_NAME='avatar_url'"))
+                if not result.fetchone():
+                    conn.execute(text('ALTER TABLE user ADD COLUMN avatar_url VARCHAR(500)'))
+    except Exception as e:
+        print(f"[WARN] Schema check/migration failed: {e}")
+
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')

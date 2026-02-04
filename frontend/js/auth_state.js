@@ -1,5 +1,55 @@
 // auth_state.js - manage auth state across pages
 (function () {
+  async function fetchProfileAndCache(token) {
+    if (!token || String(token).startsWith("fake")) return null;
+    try {
+      const response = await fetch("/api/auth/profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return null;
+      const profile = await response.json();
+      if (profile && (profile.name || profile.email)) {
+        // Merge with any existing local-only fields
+        let existing = null;
+        try {
+          existing = JSON.parse(localStorage.getItem("user") || "null");
+        } catch (e) {
+          existing = null;
+        }
+        const merged = { ...(existing || {}), ...profile };
+        localStorage.setItem("user", JSON.stringify(merged));
+      }
+      return profile;
+    } catch (e) {
+      console.warn("Profile fetch failed", e);
+      return null;
+    }
+  }
+
+  async function consumeTokenFromUrlIfPresent() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlToken = params.get("token");
+      if (!urlToken) return null;
+
+      localStorage.setItem("token", urlToken);
+      await fetchProfileAndCache(urlToken);
+
+      // Clean URL (remove token but keep other params)
+      params.delete("token");
+      const qs = params.toString();
+      const newUrl =
+        window.location.pathname +
+        (qs ? `?${qs}` : "") +
+        (window.location.hash || "");
+      window.history.replaceState({}, document.title, newUrl);
+      return urlToken;
+    } catch (e) {
+      console.warn("Failed to consume token from URL", e);
+      return null;
+    }
+  }
+
   function getUser() {
     try {
       const token = localStorage.getItem("token");
@@ -25,17 +75,21 @@
     const userWrap = document.createElement("div");
     userWrap.className = "nav-user";
     const initials = (user.name || "U").trim()[0].toUpperCase();
+    const secondary = user.email || "CodeQuest Member";
+    const avatarUrl = user.avatarUrl || user.avatar_url;
     userWrap.innerHTML = `
       <div class="nav-user-button" tabindex="0">
-        <div class="nav-user-avatar">${escapeHtml(initials)}</div>
+        <div class="nav-user-avatar">
+          ${avatarUrl ? `<img src="${escapeHtml(avatarUrl)}" alt="avatar" referrerpolicy="no-referrer" onerror="this.remove(); this.parentElement.textContent='${escapeHtml(initials)}';" />` : escapeHtml(initials)}
+        </div>
         <div class="nav-user-info">
           <div class="nav-user-name">${escapeHtml(user.name || "User")}</div>
-          <div class="nav-user-role">CodeQuest Member</div>
+          <div class="nav-user-role">${escapeHtml(secondary)}</div>
         </div>
         <div class="nav-user-caret">▾</div>
       </div>
       <div class="nav-user-dropdown">
-        <a href="/dashboard.html" class="nav-user-item">Dashboard</a>
+        <a href="/dashboard" class="nav-user-item">Dashboard</a>
         <a href="/profile" class="nav-user-item">Cập nhật thông tin</a>
         <button id="nav-logout-btn" class="nav-user-item nav-user-logout">Đăng xuất</button>
       </div>
@@ -87,6 +141,10 @@
     // Remove any existing user UI
     navLinks.querySelectorAll(".nav-user").forEach((el) => el.remove());
 
+    // Hide/remove any static logout button if present (prevents showing only "Đăng xuất" when not logged in)
+    const staticLogout = navLinks.querySelector("#logoutBtn");
+    if (staticLogout) staticLogout.remove();
+
     // If no login button exists, add one
     if (!navLinks.querySelector(".btn-login")) {
       const loginBtn = document.createElement("button");
@@ -94,7 +152,7 @@
       loginBtn.textContent = "Đăng nhập";
       loginBtn.addEventListener(
         "click",
-        () => (window.location.href = "/auth.html"),
+        () => (window.location.href = "/auth"),
       );
       navLinks.appendChild(loginBtn);
     }
@@ -112,8 +170,18 @@
     });
   }
 
-  function init() {
-    const user = getUser();
+  async function init() {
+    // 1) Support OAuth redirect that includes ?token=...
+    await consumeTokenFromUrlIfPresent();
+
+    // 2) If we have a token but missing user fields, fetch profile
+    const token = localStorage.getItem("token");
+    let user = getUser();
+    if (token && (!user || (!user.email && !user.name))) {
+      await fetchProfileAndCache(token);
+      user = getUser();
+    }
+
     if (user) setLoggedInUI(user);
     else setLoggedOutUI();
 

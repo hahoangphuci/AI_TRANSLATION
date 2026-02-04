@@ -1,35 +1,195 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, redirect, session
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from app.models import db, User
+from app.models import db, User, Translation
 import google.auth.transport.requests
 import google.oauth2.id_token
+import google.oauth2.service_account
 import os
+import secrets
 
 auth_bp = Blueprint('auth', __name__)
 
+@auth_bp.route('/config', methods=['GET'])
+def auth_config():
+    from flask import current_app
+    return jsonify({'google_client_id': current_app.config.get('GOOGLE_CLIENT_ID')}), 200
+
+@auth_bp.route('/google/authorize', methods=['POST'])
+def google_authorize():
+    """Initiate Google OAuth flow - backend creates the authorization URL"""
+    from flask import current_app
+    
+    client_id = current_app.config.get('GOOGLE_CLIENT_ID')
+    if not client_id:
+        return jsonify({"error": "Google Client ID not configured"}), 500
+    
+    # Generate random state for CSRF protection
+    state = secrets.token_urlsafe(32)
+    session['google_oauth_state'] = state
+    
+    # Build redirect URI dynamically from request
+    redirect_uri = f"{request.scheme}://{request.host}/api/auth/google/callback"
+    
+    print(f"[DEBUG] Building auth URL:")
+    print(f"[DEBUG]   Client ID: {client_id[:20]}...")
+    print(f"[DEBUG]   Redirect URI: {redirect_uri}")
+    
+    auth_url = (
+        'https://accounts.google.com/o/oauth2/v2/auth?'
+        f'client_id={client_id}&'
+        f'redirect_uri={redirect_uri}&'
+        'response_type=code&'
+        'scope=openid%20email%20profile&'
+        f'state={state}'
+    )
+    
+    print(f"[DEBUG] Full Auth URL: {auth_url[:150]}...")
+    return jsonify({'auth_url': auth_url}), 200
+
+@auth_bp.route('/google/callback', methods=['GET'])
+def google_callback():
+    """Handle Google OAuth callback - exchange code for tokens"""
+    from flask import current_app
+    import requests
+    
+    code = request.args.get('code')
+    state = request.args.get('state')
+    error = request.args.get('error')
+    
+    print(f"[DEBUG] Callback received: code={code[:20] if code else 'None'}, state={state}, error={error}")
+    
+    if error:
+        return redirect(f'/auth?error={error}')
+    
+    if not code:
+        return redirect('/auth?error=missing_code')
+    
+    # Verify state for CSRF protection
+    if state != session.get('google_oauth_state'):
+        print(f"[ERROR] State mismatch: {state} != {session.get('google_oauth_state')}")
+        return redirect('/auth?error=state_mismatch')
+    
+    client_id = current_app.config.get('GOOGLE_CLIENT_ID')
+    client_secret = current_app.config.get('GOOGLE_CLIENT_SECRET')
+    
+    if not client_id or not client_secret:
+        return redirect('/auth?error=missing_credentials')
+    
+    # Exchange code for tokens
+    redirect_uri = f"{request.scheme}://{request.host}/api/auth/google/callback"
+    
+    print(f"[DEBUG] Token exchange:")
+    print(f"[DEBUG]   Code: {code[:20] if code else 'None'}...")
+    print(f"[DEBUG]   Redirect URI: {redirect_uri}")
+    
+    token_url = 'https://oauth2.googleapis.com/token'
+    
+    try:
+        response = requests.post(token_url, data={
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': redirect_uri
+        })
+        
+        token_data = response.json()
+        print(f"[DEBUG] Token response status: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"[ERROR] Token exchange failed: {token_data}")
+            return redirect(f'/auth?error=token_exchange_failed')
+        
+        id_token = token_data.get('id_token')
+        if not id_token:
+            print(f"[ERROR] No id_token in response")
+            return redirect('/auth?error=no_id_token')
+        
+        # Verify and decode ID token
+        try:
+            idinfo = google.oauth2.id_token.verify_oauth2_token(
+                id_token,
+                google.auth.transport.requests.Request(),
+                client_id
+            )
+            
+            user_id = idinfo.get('sub')
+            email = idinfo.get('email')
+            name = idinfo.get('name')
+            
+            print(f"[DEBUG] Token verified for user: {user_id}, {email}")
+            
+            # Create or get user
+            user = User.query.filter_by(google_id=user_id).first()
+            if not user:
+                print(f"[DEBUG] Creating new user: {user_id}")
+                user = User(google_id=user_id, email=email, name=name)
+                db.session.add(user)
+                db.session.commit()
+            
+            # Create JWT for our app
+            access_token = create_access_token(identity=user_id)
+            print(f"[DEBUG] JWT created for user: {user_id}")
+            
+            # Redirect to dashboard with token
+            return redirect(f'/dashboard?token={access_token}')
+            
+        except ValueError as e:
+            print(f"[ERROR] ID token verification failed: {str(e)}")
+            return redirect(f'/auth?error=token_verification_failed')
+            
+    except Exception as e:
+        print(f"[ERROR] Token exchange exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return redirect(f'/auth?error=server_error')
+
 @auth_bp.route('/google', methods=['POST'])
 def google_auth():
-    token = request.json.get('token')
     try:
+        data = request.get_json()
+        if not data or not data.get('token'):
+            return jsonify({"error": "Missing token"}), 400
+        
+        token = data.get('token')
+        print(f"[DEBUG] Received token: {token[:50]}...")
+        
         idinfo = google.oauth2.id_token.verify_oauth2_token(
             token, 
             google.auth.transport.requests.Request(), 
             os.getenv('GOOGLE_CLIENT_ID')
         )
-        user_id = idinfo['sub']
-        email = idinfo['email']
-        name = idinfo['name']
+        
+        user_id = idinfo.get('sub')
+        email = idinfo.get('email')
+        name = idinfo.get('name')
+        
+        print(f"[DEBUG] Verified user: {user_id}, {email}, {name}")
+        
+        if not user_id or not email:
+            return jsonify({"error": "Missing user info in token"}), 400
         
         user = User.query.filter_by(google_id=user_id).first()
         if not user:
+            print(f"[DEBUG] Creating new user: {user_id}")
             user = User(google_id=user_id, email=email, name=name)
             db.session.add(user)
             db.session.commit()
         
+        print(f"[DEBUG] Creating access token for user: {user_id}")
         access_token = create_access_token(identity=user_id)
+        print(f"[DEBUG] Token created: {access_token[:50]}...")
+        
         return jsonify(access_token=access_token), 200
-    except ValueError:
-        return jsonify({"error": "Invalid token"}), 400
+        
+    except ValueError as e:
+        print(f"[ERROR] Token verification failed: {str(e)}")
+        return jsonify({"error": f"Invalid token: {str(e)}"}), 400
+    except Exception as e:
+        print(f"[ERROR] Unexpected error in google_auth: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 @auth_bp.route('/profile', methods=['GET'])
 @jwt_required()
@@ -37,9 +197,72 @@ def get_profile():
     user_id = get_jwt_identity()
     user = User.query.filter_by(google_id=user_id).first()
     if user:
+        # Compute today's translation count
+        from datetime import datetime, timedelta
+        today = datetime.utcnow().date()
+        count_today = 0
+        try:
+            count_today = Translation.query.filter(
+                Translation.user_id == user.id,
+                db.func.date(Translation.created_at) == today
+            ).count()
+        except Exception:
+            count_today = 0
+
+        # Determine plan info (daily quota is used for current enforcement/UI)
+        # Pricing copy on Home is monthly; map to a reasonable daily quota approximation here.
+        plan = user.plan or 'free'
+        plan_info = {
+            'free': {'name': 'Free', 'daily_quota': 170},      # ~5,000 words/month
+            'pro': {'name': 'Pro', 'daily_quota': 4000},       # ~120,000 words/month
+            'promax': {'name': 'ProMax', 'daily_quota': 10000} # ~300,000 words/month
+        }.get(plan, {'name': plan, 'daily_quota': 170})
+
         return jsonify({
             'id': user.id,
             'email': user.email,
-            'name': user.name
+            'name': user.name,
+            'avatar_url': getattr(user, 'avatar_url', None),
+            'plan': plan,
+            'plan_name': plan_info['name'],
+            'daily_quota': plan_info['daily_quota'],
+            'used_today': count_today
         }), 200
     return jsonify({"error": "User not found"}), 404
+
+
+@auth_bp.route('/profile', methods=['PATCH'])
+@jwt_required()
+def update_profile():
+    """Update mutable profile fields (currently: name)."""
+    user_google_id = get_jwt_identity()
+    user = User.query.filter_by(google_id=user_google_id).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    name = data.get('name')
+    avatar_url = data.get('avatar_url')
+
+    if name is not None:
+        name = str(name).strip()
+        if len(name) > 255:
+            return jsonify({"error": "Name too long"}), 400
+        user.name = name
+
+    if avatar_url is not None:
+        avatar_url = str(avatar_url).strip()
+        if avatar_url and len(avatar_url) > 500:
+            return jsonify({"error": "avatar_url too long"}), 400
+        # Allow clearing by sending empty string
+        user.avatar_url = avatar_url or None
+
+    db.session.commit()
+
+    return jsonify({
+        'id': user.id,
+        'email': user.email,
+        'name': user.name,
+        'avatar_url': getattr(user, 'avatar_url', None),
+        'plan': user.plan or 'free',
+    }), 200

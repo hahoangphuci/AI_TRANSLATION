@@ -17,9 +17,19 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
     />
-    <script src="https://apis.google.com/js/platform.js" async defer></script>
-    <meta name="google-signin-client_id" content="YOUR_GOOGLE_CLIENT_ID" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="/js/auth_state.js" defer></script>
+    <script>
+      // Fetch Google Client ID from backend config
+      fetch("/api/auth/config")
+        .then((r) => r.json())
+        .then((cfg) => {
+          if (cfg.google_client_id) {
+            window.GOOGLE_CLIENT_ID = cfg.google_client_id;
+          }
+        })
+        .catch((err) => console.warn("Could not fetch Google Client ID:", err));
+    </script>
   </head>
   <body class="theme-dark">
     <nav class="navbar">
