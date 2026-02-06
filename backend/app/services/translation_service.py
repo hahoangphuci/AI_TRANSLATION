@@ -4,6 +4,7 @@ import os
 import threading
 import uuid
 import time
+import re
 from dotenv import load_dotenv
 from app.services.file_service import FileService, ProviderRateLimitError
 from deep_translator import MyMemoryTranslator, GoogleTranslator
@@ -146,6 +147,42 @@ class TranslationService:
     def translate_document(self, file_path, target_lang):
         # Synchronous translation (kept for compatibility)
         return self.file_service.process_document(file_path, target_lang)
+
+    def translate_html(self, html, source_lang, target_lang):
+        """Translate an HTML string while preserving tags. We translate text nodes only."""
+        try:
+            from bs4 import BeautifulSoup
+            from bs4.element import NavigableString
+        except Exception as e:
+            raise RuntimeError("BeautifulSoup is required for HTML translation. Install 'beautifulsoup4'.") from e
+
+        soup = BeautifulSoup(html, "html.parser")
+        # Collect text nodes to translate
+        text_nodes = []
+        for element in soup.find_all(string=True):
+            parent_name = element.parent.name if element.parent else ''
+            # Skip non-visible or script/style/code/pre content
+            if parent_name in ('script', 'style', 'code', 'pre', 'noscript'):
+                continue
+            text = str(element).strip()
+            if text:
+                text_nodes.append(element)
+
+        # Translate each text node individually (simple; can be optimized by batching)
+        for node in text_nodes:
+            original = str(node)
+            try:
+                translated = self.translate_text(original, source_lang, target_lang)
+                # Collapse whitespace/newlines inside translated text to preserve inline flow
+                translated = re.sub(r"\s+", " ", str(translated)).strip()
+                # Replace the node content with translated text (preserving tags)
+                node.replace_with(translated)
+            except Exception as e:
+                # On failure, keep original text to avoid corrupting HTML
+                print(f"HTML node translation failed, keeping original: {e}")
+                continue
+
+        return str(soup)
 
     def _check_provider_available(self):
         """Lightweight preflight check to see if the configured AI provider is available.

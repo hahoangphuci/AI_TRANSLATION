@@ -2,6 +2,7 @@
 class AuthManager {
   constructor() {
     this.token = localStorage.getItem("token");
+    this.profile = null;
   }
 
   isAuthenticated() {
@@ -69,8 +70,43 @@ class AuthManager {
       }
 
       const data = await response.json();
+      this.profile = data;
       const nameEl = document.getElementById("userName");
       if (nameEl) nameEl.textContent = data.name || "User";
+
+      // Update plan UI if present
+      try {
+        if (data.plan_name) {
+          const planNameEl = document.getElementById("planName");
+          const planSub = document.getElementById("planSubtitle");
+          if (planNameEl) planNameEl.textContent = data.plan_name;
+          if (planSub)
+            planSub.textContent =
+              data.plan === "free"
+                ? "Gói miễn phí"
+                : data.plan === "pro"
+                  ? "Gói Pro"
+                  : data.plan === "promax"
+                    ? "Gói ProMax"
+                    : data.plan;
+
+          const usedEl = document.getElementById("usedToday");
+          const quotaEl = document.getElementById("dailyQuota");
+          const fillEl = document.getElementById("usageFill");
+          const used = parseInt(data.used_today || 0, 10);
+          const quota = parseInt(data.daily_quota || 0, 10);
+          if (usedEl) usedEl.textContent = used;
+          if (quotaEl) quotaEl.textContent = quota < 0 ? "∞" : quota;
+          if (fillEl) {
+            const pct =
+              quota > 0 ? Math.min(100, Math.round((used / quota) * 100)) : 0;
+            fillEl.style.width = `${pct}%`;
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to update plan UI", e);
+      }
+
       return data;
     } catch (error) {
       console.error("Error loading user info:", error);
@@ -275,23 +311,108 @@ class TranslationManager {
 
   setupEventListeners() {
     const inputText = document.getElementById("inputText");
+    const richInput = document.getElementById("richInput");
     const charCount = document.getElementById("charCount");
+    const richToggle = document.getElementById("richToggle");
+    const toolbar = document.getElementById("editorToolbar");
 
-    inputText.addEventListener("input", () => {
-      const count = inputText.value.length;
+    const updateCharCount = () => {
+      let text = "";
+      if (richToggle && richToggle.checked && richInput)
+        text = richInput.innerText || "";
+      else if (inputText) text = inputText.value || "";
+      const count = text.length;
       charCount.textContent = count;
+      charCount.style.color =
+        count > 5000 ? "#00A8FF" : "rgba(255,255,255,0.7)";
+    };
 
-      if (count > 5000) {
-        charCount.style.color = "#00A8FF";
-      } else {
-        charCount.style.color = "rgba(255, 255, 255, 0.7)";
-      }
+    if (inputText) inputText.addEventListener("input", updateCharCount);
+    if (richInput) richInput.addEventListener("input", updateCharCount);
+
+    if (richToggle) {
+      richToggle.addEventListener("change", (e) => {
+        const checked = e.target.checked;
+        if (checked) {
+          richInput.style.display = "block";
+          inputText.style.display = "none";
+          toolbar && (toolbar.style.display = "flex");
+          // copy current plain text into rich editor as simple HTML
+          richInput.innerHTML = (inputText.value || "").replace(/\n/g, "<br>");
+          richInput.focus();
+        } else {
+          richInput.style.display = "none";
+          inputText.style.display = "block";
+          toolbar && (toolbar.style.display = "none");
+          inputText.value =
+            richInput && richInput.innerText
+              ? richInput.innerText
+              : inputText.value;
+        }
+        updateCharCount();
+      });
+    }
+
+    // Toolbar buttons
+    document.querySelectorAll(".toolbar-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const cmd = btn.dataset.cmd;
+        if (!cmd) return;
+        if (cmd === "createLink") {
+          const url = prompt("Nhập URL (ví dụ: https://example.com)");
+          if (url) document.execCommand(cmd, false, url);
+        } else {
+          document.execCommand(cmd, false, null);
+        }
+        richInput && richInput.focus();
+      });
     });
+
+    // Keyboard shortcuts for rich editor
+    if (richInput) {
+      richInput.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+          const key = e.key.toLowerCase();
+          if (key === "b") {
+            e.preventDefault();
+            document.execCommand("bold");
+          }
+          if (key === "i") {
+            e.preventDefault();
+            document.execCommand("italic");
+          }
+          if (key === "u") {
+            e.preventDefault();
+            document.execCommand("underline");
+          }
+        }
+      });
+    }
+
+    // hide toolbar initially if not active
+    if (toolbar && (!richToggle || !richToggle.checked))
+      toolbar.style.display = "none";
   }
 
   async translateText() {
-    const text = document.getElementById("inputText").value.trim();
-    const sourceLang = document.getElementById("sourceLang").value;
+    const richOn = document.getElementById("richToggle")?.checked;
+    let text = "";
+    const preserve = document.getElementById("preserveFormatting")?.checked;
+    if (richOn) {
+      const richEl = document.getElementById("richInput");
+      if (preserve && richEl) {
+        // Send raw HTML when user wants to preserve formatting
+        text = richEl ? richEl.innerHTML || "" : "";
+      } else {
+        text = richEl ? richEl.innerText || "" : "";
+      }
+    } else {
+      text = document.getElementById("inputText").value.trim();
+    }
+    const sourceLang =
+      (document.getElementById("sourceLang") &&
+        document.getElementById("sourceLang").value) ||
+      "auto";
     const targetLang = document.getElementById("targetLang").value;
 
     // Ensure user is authenticated
@@ -318,6 +439,28 @@ class TranslationManager {
     translateBtnText.textContent = "Đang dịch...";
     translateLoading.style.display = "inline-block";
     translateBtn.disabled = true;
+    // Accessibility: set ARIA busy and live status
+    try {
+      translateBtn.setAttribute("aria-busy", "true");
+      const translateStatusEl = document.getElementById("translateStatus");
+      if (translateStatusEl) translateStatusEl.textContent = "Đang dịch...";
+    } catch (e) {
+      // ignore
+    }
+
+    // Show faux progress
+    const textProgress = document.getElementById("textProgress");
+    const textProgressFill = document.getElementById("textProgressFill");
+    let progressInterval;
+    if (textProgress) {
+      textProgress.style.display = "block";
+      textProgressFill.style.width = "0%";
+      let p = 0;
+      progressInterval = setInterval(() => {
+        p = Math.min(95, p + Math.random() * 8);
+        textProgressFill.style.width = `${p}%`;
+      }, 250);
+    }
 
     try {
       const response = await fetch("/api/translation/text", {
@@ -330,6 +473,7 @@ class TranslationManager {
           text: text,
           source_lang: sourceLang,
           target_lang: targetLang,
+          is_html: richOn && preserve ? true : false,
         }),
       });
 
@@ -343,7 +487,10 @@ class TranslationManager {
       }
 
       const data = await response.json();
-      this.showTranslationResult(data.translated_text);
+      this.showTranslationResult(data.translated_text, data.is_html);
+
+      // Show a small success toast
+      UIManager.showNotification("Dịch hoàn tất", "success");
 
       // Reload stats and history
       dashboard.stats.loadStats();
@@ -353,20 +500,82 @@ class TranslationManager {
       UIManager.showError(
         error.message || "Có lỗi xảy ra khi dịch. Vui lòng thử lại.",
       );
+      // Also show toast
+      UIManager.showNotification(error.message || "Lỗi khi dịch.", "error");
     } finally {
-      // Hide loading state
+      // Hide loading state & finish progress
       translateBtnText.textContent = "Dịch";
       translateLoading.style.display = "none";
       translateBtn.disabled = false;
+      // Clear ARIA busy
+      try {
+        translateBtn.removeAttribute("aria-busy");
+        const translateStatusEl = document.getElementById("translateStatus");
+        if (translateStatusEl) translateStatusEl.textContent = "";
+      } catch (e) {
+        // ignore
+      }
+
+      if (progressInterval) clearInterval(progressInterval);
+      if (textProgress) {
+        const textProgressFill = document.getElementById("textProgressFill");
+        textProgressFill.style.width = "100%";
+        setTimeout(() => {
+          textProgress.style.display = "none";
+          textProgressFill.style.width = "0%";
+        }, 600);
+      }
     }
   }
 
-  showTranslationResult(translatedText) {
+  showTranslationResult(translatedText, isHtml) {
     const resultDiv = document.getElementById("translationResult");
     const outputDiv = document.getElementById("outputText");
+    const previewPane = document.getElementById("previewPane");
+    const preserve = document.getElementById("preserveFormatting")?.checked;
 
-    outputDiv.textContent = translatedText;
+    // If result is HTML or user requested preserve, render as HTML in preview
+    if (isHtml || preserve) {
+      if (previewPane)
+        previewPane.innerHTML = translatedText || "<em>Không có kết quả</em>";
+      // For plain text output area, also show escaped text (strip tags)
+      outputDiv.textContent = (translatedText || "").replace(/<[^>]*>/g, "");
+    } else {
+      outputDiv.textContent = translatedText;
+      if (previewPane) {
+        // Convert plain text into paragraphs: split on double-newlines, collapse inner whitespace
+        previewPane.innerHTML = this.plainTextToHTML(translatedText || "");
+      }
+    }
+
     resultDiv.style.display = "block";
+  }
+
+  // Utility: escape text for <pre>
+
+  escapedForPre(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  // Convert plain text to HTML paragraphs, collapsing stray newlines inside paragraphs
+  plainTextToHTML(s) {
+    if (!s) return "<em>Không có kết quả</em>";
+    // Normalize CRLF
+    s = s.replace(/\r\n?/g, "\n");
+    // Split into paragraphs on 2+ newlines
+    const parts = s.split(/\n{2,}/g);
+    const escaped = parts
+      .map((p) => {
+        const collapsed = p.replace(/\s+/g, " ").trim();
+        return `<p>${this.escapedForPre(collapsed)}</p>`;
+      })
+      .join("");
+    return escaped;
   }
 
   copyResult() {
@@ -377,8 +586,20 @@ class TranslationManager {
   }
 
   async saveTranslation() {
-    const originalText = document.getElementById("inputText").value;
-    const translatedText = document.getElementById("outputText").textContent;
+    const richOn = document.getElementById("richToggle")?.checked;
+    const preserve = document.getElementById("preserveFormatting")?.checked;
+    let originalText = document.getElementById("inputText").value;
+    if (richOn && preserve) {
+      const rich = document.getElementById("richInput");
+      originalText = rich ? rich.innerHTML : originalText;
+    } else if (richOn) {
+      const rich = document.getElementById("richInput");
+      originalText = rich ? rich.innerText : originalText;
+    }
+
+    const translatedText =
+      document.getElementById("outputText").textContent ||
+      document.getElementById("previewPane").innerHTML;
 
     try {
       const response = await fetch("/api/translation/save", {
@@ -413,11 +634,13 @@ class HistoryManager {
     this.auth = authManager;
     this.currentPage = 1;
     this.currentFilter = "all";
+    this.currentDate = "";
   }
 
-  async loadHistory(page = 1, filter = "all") {
+  async loadHistory(page = 1, filter = "all", date = "") {
     this.currentPage = page;
     this.currentFilter = filter;
+    this.currentDate = date || "";
 
     try {
       // Dev: if token is fake, use local mock history
@@ -444,6 +667,10 @@ class HistoryManager {
         per_page: 10,
         type: filter,
       });
+
+      if (date) {
+        params.set("date", date);
+      }
 
       const response = await fetch(`/api/translation/history?${params}`, {
         headers: this.auth.getAuthHeaders(),
@@ -511,13 +738,14 @@ class HistoryManager {
   changePage(direction) {
     const newPage = this.currentPage + direction;
     if (newPage > 0) {
-      this.loadHistory(newPage, this.currentFilter);
+      this.loadHistory(newPage, this.currentFilter, this.currentDate);
     }
   }
 
   filterHistory() {
     const filter = document.getElementById("historyFilter").value;
-    this.loadHistory(1, filter);
+    const date = (document.getElementById("dateFilter") || {}).value || "";
+    this.loadHistory(1, filter, date);
   }
 }
 
@@ -810,8 +1038,20 @@ class DashboardStatsManager {
 
     document.getElementById("translationCount").textContent = todayCount;
     document.getElementById("documentCount").textContent = documentCount;
-    document.getElementById("usagePercent").textContent =
-      Math.min(Math.round((todayCount / 10) * 100), 100) + "%";
+
+    // Use quota info shown in plan card if available
+    const usedText = (document.getElementById("usedToday") || {}).textContent;
+    const quotaText = (document.getElementById("dailyQuota") || {}).textContent;
+    const used = parseInt(usedText || "0", 10);
+    const quota = parseInt(quotaText || "0", 10);
+
+    const usageEl = document.getElementById("usagePercent");
+    if (!usageEl) return;
+    if (!Number.isFinite(quota) || quota <= 0) {
+      usageEl.textContent = "—";
+    } else {
+      usageEl.textContent = `${Math.min(100, Math.round((used / quota) * 100))}%`;
+    }
   }
 }
 
@@ -829,6 +1069,15 @@ class DashboardController {
   }
 
   init() {
+    // Extract token from URL query parameter (from OAuth callback)
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get("token");
+    if (tokenFromUrl) {
+      localStorage.setItem("token", tokenFromUrl);
+      // Remove token from URL to clean it up
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     // Check authentication first
     if (!this.auth.isAuthenticated()) {
       // Hide the entire dashboard and show login prompt
@@ -958,6 +1207,24 @@ class DashboardController {
         );
       }
 
+      const dateFilter = document.getElementById("dateFilter");
+      if (dateFilter) {
+        dateFilter.addEventListener("change", () =>
+          this.history.filterHistory(),
+        );
+      }
+
+      // Settings link opens modal
+      const settingsLink = document.querySelector(
+        '.nav-links a.nav-link[href="#settings"]',
+      );
+      if (settingsLink) {
+        settingsLink.addEventListener("click", (e) => {
+          e.preventDefault();
+          openSettingsModal();
+        });
+      }
+
       // Close notification
       const notificationClose = document.querySelector(".notification-close");
       if (notificationClose) {
@@ -985,6 +1252,79 @@ class DashboardController {
     }
   }
 
+  // Upgrade modal handlers
+  openUpgradeModal() {
+    const m = document.getElementById("upgradeModal");
+    if (m) m.style.display = "block";
+  }
+
+  closeUpgradeModal() {
+    const m = document.getElementById("upgradeModal");
+    if (m) m.style.display = "none";
+  }
+
+  startUpgrade(plan) {
+    if (!this.auth.isAuthenticated()) {
+      this.auth.redirectToLogin();
+      return;
+    }
+
+    // Development mode: support fake tokens by updating cached user locally
+    const token = localStorage.getItem("token") || "";
+    if (String(token).startsWith("fake")) {
+      try {
+        const cached = localStorage.getItem("user");
+        const parsed = cached ? JSON.parse(cached) : {};
+        const planNameMap = { free: "Free", pro: "Pro", promax: "ProMax" };
+        parsed.plan = plan;
+        parsed.plan_name = planNameMap[plan] || plan;
+        localStorage.setItem("user", JSON.stringify(parsed));
+      } catch (e) {
+        // ignore
+      }
+      UIManager.showNotification("Đã nâng cấp gói (Dev local).", "success");
+      this.closeUpgradeModal();
+      this.auth.loadUserInfo();
+      return;
+    }
+
+    const headers = {
+      "Content-Type": "application/json",
+      ...this.auth.getAuthHeaders(),
+    };
+
+    UIManager.showNotification("Đang xử lý nâng cấp gói...", "info");
+
+    fetch("/api/payment/dev/activate-plan", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ plan }),
+    })
+      .then(async (res) => {
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg =
+            payload && payload.error ? payload.error : "Upgrade failed";
+          throw new Error(msg);
+        }
+        return payload;
+      })
+      .then(async (payload) => {
+        UIManager.showNotification(
+          `Đã nâng cấp lên ${payload.plan_name || plan.toUpperCase()} (Dev).`,
+          "success",
+        );
+        this.closeUpgradeModal();
+        await this.auth.loadUserInfo();
+      })
+      .catch((err) => {
+        UIManager.showNotification(
+          `Không thể nâng cấp gói: ${err.message || err}`,
+          "error",
+        );
+      });
+  }
+
   async loadInitialData() {
     const profile = await this.auth.loadUserInfo();
     // If profile not available (invalid token or not logged in), show login prompt
@@ -995,6 +1335,14 @@ class DashboardController {
 
     await this.stats.loadStats();
     await this.history.loadHistory();
+
+    // Apply saved settings to UI
+    try {
+      const s = loadSettings();
+      applySettingsToUI(s);
+    } catch (e) {
+      // ignore
+    }
 
     // Update authentication UI
     this.auth.updateAuthUI();
@@ -1060,6 +1408,46 @@ function downloadResult() {
   UIManager.showNotification("Đã tải xuống file kết quả!", "success");
 }
 
+function downloadHTML() {
+  const previewPane = document.getElementById("previewPane");
+  let bodyContent = previewPane
+    ? previewPane.innerHTML
+    : document.getElementById("outputText").textContent;
+  // If preview contains plain text wrapped in <pre>, extract text
+  if (/<pre>/.test(bodyContent)) {
+    bodyContent = document
+      .getElementById("outputText")
+      .textContent.replace(/\n/g, "<br>");
+  }
+  const full = `<!doctype html><html><head><meta charset="utf-8"><title>Translated</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family: Inter, Arial, sans-serif; padding:20px; background:#fff; color:#111">${bodyContent}</body></html>`;
+  const blob = new Blob([full], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "translated.html";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  UIManager.showNotification("Đã tải xuống HTML!", "success");
+}
+
+// Improve notification creator for toast display
+UIManager.showToastNotification = function (message, type = "info") {
+  const notification = document.createElement("div");
+  notification.className = `notification ${type}`;
+  notification.innerHTML = `
+            <i class="fas ${type === "success" ? "fa-check-circle" : type === "error" ? "fa-exclamation-circle" : "fa-info-circle"}"></i>
+            ${message}
+        `;
+  document.body.appendChild(notification);
+  setTimeout(() => notification.classList.add("show"), 50);
+  setTimeout(() => {
+    notification.classList.remove("show");
+    setTimeout(() => document.body.removeChild(notification), 300);
+  }, 3000);
+};
+
 function downloadTranslatedFile() {
   // This function is called from the success message
   // The actual download is handled in the uploadDocument method
@@ -1071,6 +1459,124 @@ function toggleUserMenu() {
 
 function logout() {
   dashboard.auth.logout();
+}
+
+function openUpgradeModal() {
+  dashboard.openUpgradeModal();
+}
+function closeUpgradeModal() {
+  dashboard.closeUpgradeModal();
+}
+function startUpgrade(plan) {
+  dashboard.startUpgrade(plan);
+}
+
+function openSettingsModal() {
+  const m = document.getElementById("settingsModal");
+  if (m) m.style.display = "block";
+
+  // Populate form from profile + saved settings
+  try {
+    const profile = dashboard?.auth?.profile;
+    const nameInput = document.getElementById("userFullName");
+    const emailInput = document.getElementById("userEmail");
+    if (profile) {
+      if (nameInput) nameInput.value = profile.name || "";
+      if (emailInput) emailInput.value = profile.email || "";
+    }
+    const s = loadSettings();
+    applySettingsToUI(s);
+  } catch (e) {
+    // ignore
+  }
+}
+
+function closeSettingsModal() {
+  const m = document.getElementById("settingsModal");
+  if (m) m.style.display = "none";
+}
+
+async function updateProfile() {
+  const name = (document.getElementById("userFullName") || {}).value || "";
+  if (!dashboard?.auth?.isAuthenticated()) {
+    UIManager.showNotification("Vui lòng đăng nhập.", "error");
+    return;
+  }
+  try {
+    const resp = await fetch("/api/auth/profile", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...dashboard.auth.getAuthHeaders(),
+      },
+      body: JSON.stringify({ name }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || "Update failed");
+    }
+    const data = await resp.json();
+    // Refresh cached profile
+    dashboard.auth.profile = { ...(dashboard.auth.profile || {}), ...data };
+    UIManager.showNotification("Đã cập nhật thông tin!", "success");
+    await dashboard.auth.loadUserInfo();
+  } catch (e) {
+    console.error("updateProfile error", e);
+    UIManager.showNotification(e.message || "Có lỗi khi cập nhật.", "error");
+  }
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem("dashboard_settings");
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveSettings() {
+  const s = {
+    defaultTargetLang: (document.getElementById("defaultTargetLang") || {})
+      .value,
+    autoSave: !!(document.getElementById("autoSave") || {}).checked,
+    emailNotifications: !!(document.getElementById("emailNotifications") || {})
+      .checked,
+    translationComplete: !!(
+      document.getElementById("translationComplete") || {}
+    ).checked,
+  };
+  localStorage.setItem("dashboard_settings", JSON.stringify(s));
+  applySettingsToUI(s);
+  UIManager.showNotification("Đã lưu cài đặt!", "success");
+}
+
+function applySettingsToUI(s) {
+  if (!s) return;
+  const defaultTarget = document.getElementById("defaultTargetLang");
+  if (defaultTarget && s.defaultTargetLang)
+    defaultTarget.value = s.defaultTargetLang;
+
+  const autoSave = document.getElementById("autoSave");
+  if (autoSave && typeof s.autoSave === "boolean")
+    autoSave.checked = s.autoSave;
+
+  const emailNotifications = document.getElementById("emailNotifications");
+  if (emailNotifications && typeof s.emailNotifications === "boolean")
+    emailNotifications.checked = s.emailNotifications;
+
+  const translationComplete = document.getElementById("translationComplete");
+  if (translationComplete && typeof s.translationComplete === "boolean")
+    translationComplete.checked = s.translationComplete;
+
+  // Apply default target language to translate/upload selects when available
+  if (s.defaultTargetLang) {
+    const targetLang = document.getElementById("targetLang");
+    if (targetLang && !targetLang.value) targetLang.value = s.defaultTargetLang;
+    const uploadTargetLang = document.getElementById("uploadTargetLang");
+    if (uploadTargetLang && !uploadTargetLang.value)
+      uploadTargetLang.value = s.defaultTargetLang;
+  }
 }
 
 async function deleteHistoryItem(id) {

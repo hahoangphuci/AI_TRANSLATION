@@ -8,6 +8,8 @@ class User(db.Model):
     google_id = db.Column(db.String(255), unique=True)
     email = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255))
+    avatar_url = db.Column(db.String(500))
+    plan = db.Column(db.String(50), default='free')  # free, pro, enterprise
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Translation(db.Model):

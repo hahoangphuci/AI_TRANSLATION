@@ -1,299 +1,496 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Trang chủ - AI Translation System</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/theme-dark.css">
-    <link rel="stylesheet" href="/css/home.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/theme-dark.css" />
+    <link rel="stylesheet" href="/css/home.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
     <script src="/js/auth_state.js" defer></script>
     <script src="/js/languages.js"></script>
     <script src="/js/populate_languages.js" defer></script>
     <script src="/js/custom_lang_selects.js" defer></script>
     <script src="/js/ai_config.js" defer></script>
-</head>
-<body class="theme-dark">
+  </head>
+  <body class="theme-dark">
     <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-logo">
-                <i class="fas fa-language"></i>
-                <span>AI Translator</span>
-            </div>
-            <div class="nav-links">
-                <a href="#home" class="nav-link active">Trang chủ</a>
-                <a href="#features" class="nav-link">Tính năng</a>
-                <a href="#pricing" class="nav-link">Giá cả</a>
-                <a href="about.html" class="nav-link">Về chúng tôi</a>
-                <a href="contact.html" class="nav-link">Liên hệ</a>
-                <button id="loginBtn" class="btn-login" onclick="window.location.href='auth.html'">Đăng nhập</button>
-            </div>
-            <div class="hamburger" onclick="toggleMenu()">
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
+      <div class="nav-container">
+        <div class="nav-logo">
+          <i class="fas fa-language"></i>
+          <span>AI Translator</span>
         </div>
+        <div class="nav-links">
+          <a href="#home" class="nav-link active">Trang chủ</a>
+          <a href="#features" class="nav-link">Tính năng</a>
+          <a href="#pricing" class="nav-link">Giá cả</a>
+          <a href="about.html" class="nav-link">Về chúng tôi</a>
+          <a href="contact.html" class="nav-link">Liên hệ</a>
+          <button
+            id="loginBtn"
+            class="btn-login"
+            onclick="window.location.href = 'auth.html'"
+          >
+            Đăng nhập
+          </button>
+        </div>
+        <div class="hamburger" onclick="toggleMenu()">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
     </nav>
 
     <section id="home" class="hero">
-        <div class="hero-container">
-            <div class="hero-content">
-                <h1 class="hero-title">
-                    Dịch Văn Bản & Tài Liệu<br>
-                    <span class="highlight">Giữ Định Dạng Gốc</span>
-                </h1>
-                <p class="hero-subtitle">
-                    Sử dụng trí tuệ nhân tạo tiên tiến để dịch 100+ ngôn ngữ với chất lượng cao nhất
-                </p>
-                <div class="hero-buttons">
-                    <button class="btn-primary" onclick="window.location.href='auth.html'">
-                        <i class="fas fa-play"></i> Bắt đầu dịch
-                    </button>
-                    <button class="btn-secondary" onclick="scrollToFeatures()">
-                        <i class="fas fa-info-circle"></i> Tìm hiểu thêm
-                    </button>
-                </div>
-            </div>
-            <div class="hero-image">
-                <div class="translation-demo">
-                    <div class="demo-card glassmorphism">
-                        <div class="demo-header">
-                            <span class="demo-lang">EN</span>
-                            <i class="fas fa-arrow-right"></i>
-                            <span class="demo-lang">VI</span>
-                        </div>
-                        <div class="demo-content">
-                            <p class="demo-text original">Hello, how are you today?</p>
-                            <p class="demo-text translated">Xin chào, hôm nay bạn thế nào?</p>
-                        </div>
-                    </div>
-
-                    <!-- Quick Translation Form -->
-                    <div class="quick-translate glassmorphism">
-                        <h4>Thử dịch ngay!</h4>
-                        <div class="quick-form">
-                            <input type="text" id="quick-text" placeholder="Nhập văn bản cần dịch..." maxlength="100">
-                            <select id="quick-target-lang" class="lang-select" data-placeholder="Chọn ngôn ngữ">
-                                <option value="vi">Tiếng Việt</option>
-                                <option value="en">English</option>
-                                <option value="fr">Français</option>
-                                <option value="de">Deutsch</option>
-                            </select>
-                            <button class="btn-secondary" onclick="quickTranslate()">
-                                <i class="fas fa-language"></i> Dịch
-                            </button>
-                        </div>
-                        <div id="quick-result" class="quick-result" style="display: none;">
-                            <small>Kết quả: <span id="quick-output"></span></small>
-                        </div>
-                    </div>
-                </div>
-            </div>
+      <div class="hero-container">
+        <div class="hero-content">
+          <h1 class="hero-title">
+            Dịch Văn Bản & Tài Liệu<br />
+            <span class="highlight">Giữ Định Dạng Gốc</span>
+          </h1>
+          <p class="hero-subtitle">
+            Sử dụng trí tuệ nhân tạo tiên tiến để dịch 100+ ngôn ngữ với chất
+            lượng cao nhất
+          </p>
+          <div class="hero-buttons">
+            <button
+              class="btn-primary"
+              onclick="window.location.href = 'dashboard.html'"
+            >
+              <i class="fas fa-play"></i> Bắt đầu dịch
+            </button>
+            <button
+              class="btn-secondary"
+              onclick="document.getElementById('quick-text').focus()"
+            >
+              <i class="fas fa-magic"></i> Dùng thử ngay
+            </button>
+            <button class="btn-outline" onclick="scrollToFeatures()">
+              <i class="fas fa-info-circle"></i> Tìm hiểu thêm
+            </button>
+          </div>
         </div>
+        <div class="hero-image">
+          <div class="translation-demo">
+            <div class="demo-card glassmorphism">
+              <div class="demo-header">
+                <span class="demo-lang">EN</span>
+                <i class="fas fa-arrow-right"></i>
+                <span class="demo-lang">VI</span>
+              </div>
+              <div class="demo-content">
+                <p class="demo-text original">Hello, how are you today?</p>
+                <p class="demo-text translated">
+                  Xin chào, hôm nay bạn thế nào?
+                </p>
+              </div>
+            </div>
+
+            <!-- Quick Translation Form -->
+            <div class="quick-translate glassmorphism">
+              <h4>Thử dịch ngay!</h4>
+              <div class="quick-form">
+                <input
+                  type="text"
+                  id="quick-text"
+                  placeholder="Nhập văn bản cần dịch..."
+                  maxlength="100"
+                />
+                <select
+                  id="quick-target-lang"
+                  class="lang-select"
+                  data-placeholder="Chọn ngôn ngữ"
+                >
+                  <option value="vi">Tiếng Việt</option>
+                  <option value="en">English</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                </select>
+                <button class="btn-secondary" onclick="quickTranslate()">
+                  <i class="fas fa-language"></i> Dịch
+                </button>
+              </div>
+              <div id="quick-result" class="quick-result" style="display: none">
+                <small>Kết quả: <span id="quick-output"></span></small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
+
+    <section class="how-it-works">
+      <div class="container">
+        <div class="section-header">
+          <h2>Hoạt động chỉ trong 3 bước</h2>
+          <p>Dịch giữ định dạng, nhanh chóng và chính xác</p>
+        </div>
+        <div class="how-grid">
+          <div class="how-step glassmorphism">
+            <div class="step-icon"><i class="fas fa-upload"></i></div>
+            <h4>1. Tải lên hoặc nhập văn bản</h4>
+            <p>
+              Hỗ trợ nhập văn bản, upload PDF/DOCX/Excel và giữ định dạng gốc.
+            </p>
+          </div>
+          <div class="how-step glassmorphism">
+            <div class="step-icon"><i class="fas fa-robot"></i></div>
+            <h4>2. AI dịch tự động</h4>
+            <p>
+              Mô hình AI chuyên nghiệp dịch chính xác, tối ưu cho ngôn ngữ đích.
+            </p>
+          </div>
+          <div class="how-step glassmorphism">
+            <div class="step-icon"><i class="fas fa-download"></i></div>
+            <h4>3. Tải về & sử dụng</h4>
+            <p>Tải file đã dịch (PDF/DOCX) hoặc copy/easy share kết quả.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- CTA Section -->
     <section class="cta">
-        <div class="container">
-            <div class="cta-content">
-                <h2>Sẵn sàng trải nghiệm dịch thuật AI?</h2>
-                <p>Đăng ký tài khoản miễn phí ngay hôm nay và nhận 100 từ dịch miễn phí!</p>
-                <div class="cta-buttons">
-                    <button class="btn-primary" onclick="window.location.href='/auth.html#register'">
-                        <i class="fas fa-rocket"></i> Bắt đầu miễn phí
-                    </button>
-                    <button class="btn-secondary" onclick="scrollToFeatures()">
-                        <i class="fas fa-info-circle"></i> Tìm hiểu thêm
-                    </button>
-                </div>
-            </div>
+      <div class="container">
+        <div class="cta-content">
+          <h2>Sẵn sàng trải nghiệm dịch thuật AI?</h2>
+          <p>
+            Đăng ký tài khoản miễn phí ngay hôm nay và nhận 100 từ dịch miễn
+            phí!
+          </p>
+          <div class="cta-buttons">
+            <button
+              class="btn-primary"
+              onclick="window.location.href = '/auth.html#register'"
+            >
+              <i class="fas fa-rocket"></i> Bắt đầu miễn phí
+            </button>
+            <button class="btn-secondary" onclick="scrollToFeatures()">
+              <i class="fas fa-info-circle"></i> Tìm hiểu thêm
+            </button>
+          </div>
         </div>
+      </div>
     </section>
     <section id="features" class="features">
-        <div class="container">
-            <div class="section-header">
-                <h2>Tính năng nổi bật</h2>
-                <p>Công nghệ dịch thuật AI tiên tiến nhất</p>
-            </div>
-            <div class="features-grid">
-                <div class="feature-card glassmorphism">
-                    <div class="feature-icon">
-                        <i class="fas fa-brain"></i>
-                    </div>
-                    <h3>AI Tiên tiến</h3>
-                    <p>Sử dụng các mô hình ngôn ngữ lớn nhất để đảm bảo chất lượng dịch thuật cao nhất</p>
-                </div>
-                <div class="feature-card glassmorphism">
-                    <div class="feature-icon">
-                        <i class="fas fa-file-alt"></i>
-                    </div>
-                    <h3>Giữ định dạng</h3>
-                    <p>Dịch tài liệu PDF, Word, Excel mà vẫn giữ nguyên định dạng gốc</p>
-                </div>
-                <div class="feature-card glassmorphism">
-                    <div class="feature-icon">
-                        <i class="fas fa-globe"></i>
-                    </div>
-                    <h3>100+ ngôn ngữ</h3>
-                    <p>Hỗ trợ dịch giữa tất cả các ngôn ngữ phổ biến trên thế giới</p>
-                </div>
-                <div class="feature-card glassmorphism">
-                    <div class="feature-icon">
-                        <i class="fas fa-shield-alt"></i>
-                    </div>
-                    <h3>Bảo mật cao</h3>
-                    <p>Dữ liệu được mã hóa và bảo vệ tuyệt đối, không lưu trữ vĩnh viễn</p>
-                </div>
-                <div class="feature-card glassmorphism">
-                    <div class="feature-icon">
-                        <i class="fas fa-clock"></i>
-                    </div>
-                    <h3>Dịch nhanh</h3>
-                    <p>Xử lý hàng nghìn từ chỉ trong vài giây với tốc độ siêu nhanh</p>
-                </div>
-                <div class="feature-card glassmorphism">
-                    <div class="feature-icon">
-                        <i class="fas fa-history"></i>
-                    </div>
-                    <h3>Lịch sử dịch</h3>
-                    <p>Lưu trữ và quản lý tất cả các bản dịch của bạn một cách dễ dàng</p>
-                </div>
-            </div>
+      <div class="container">
+        <div class="section-header">
+          <h2>Tính năng nổi bật</h2>
+          <p>Công nghệ dịch thuật AI tiên tiến nhất</p>
         </div>
+        <div class="features-grid">
+          <div class="feature-card glassmorphism">
+            <div class="feature-icon">
+              <i class="fas fa-brain"></i>
+            </div>
+            <h3>AI Tiên tiến</h3>
+            <p>
+              Sử dụng các mô hình ngôn ngữ lớn nhất để đảm bảo chất lượng dịch
+              thuật cao nhất
+            </p>
+          </div>
+          <div class="feature-card glassmorphism">
+            <div class="feature-icon">
+              <i class="fas fa-file-alt"></i>
+            </div>
+            <h3>Giữ định dạng</h3>
+            <p>
+              Dịch tài liệu PDF, Word, Excel mà vẫn giữ nguyên định dạng gốc
+            </p>
+          </div>
+          <div class="feature-card glassmorphism">
+            <div class="feature-icon">
+              <i class="fas fa-globe"></i>
+            </div>
+            <h3>100+ ngôn ngữ</h3>
+            <p>Hỗ trợ dịch giữa tất cả các ngôn ngữ phổ biến trên thế giới</p>
+          </div>
+          <div class="feature-card glassmorphism">
+            <div class="feature-icon">
+              <i class="fas fa-shield-alt"></i>
+            </div>
+            <h3>Bảo mật cao</h3>
+            <p>
+              Dữ liệu được mã hóa và bảo vệ tuyệt đối, không lưu trữ vĩnh viễn
+            </p>
+          </div>
+          <div class="feature-card glassmorphism">
+            <div class="feature-icon">
+              <i class="fas fa-clock"></i>
+            </div>
+            <h3>Dịch nhanh</h3>
+            <p>Xử lý hàng nghìn từ chỉ trong vài giây với tốc độ siêu nhanh</p>
+          </div>
+          <div class="feature-card glassmorphism">
+            <div class="feature-icon">
+              <i class="fas fa-history"></i>
+            </div>
+            <h3>Lịch sử dịch</h3>
+            <p>
+              Lưu trữ và quản lý tất cả các bản dịch của bạn một cách dễ dàng
+            </p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="pricing" class="pricing">
-        <div class="container">
-            <div class="section-header">
-                <h2>Bảng giá</h2>
-                <p>Chọn gói phù hợp với nhu cầu của bạn</p>
-            </div>
-            <div class="pricing-grid">
-                <div class="pricing-card glassmorphism">
-                    <div class="pricing-header">
-                        <h3>Miễn phí</h3>
-                        <div class="price">
-                            <span class="amount">0</span>
-                            <span class="period">VNĐ</span>
-                        </div>
-                    </div>
-                    <ul class="pricing-features">
-                        <li><i class="fas fa-check"></i> 100 từ/ngày</li>
-                        <li><i class="fas fa-check"></i> 5 ngôn ngữ cơ bản</li>
-                        <li><i class="fas fa-check"></i> Lịch sử 7 ngày</li>
-                        <li><i class="fas fa-times"></i> Không hỗ trợ tài liệu</li>
-                        <li><i class="fas fa-times"></i> Không hỗ trợ API</li>
-                    </ul>
-                    <button class="btn-primary" onclick="window.location.href='auth.html'">Bắt đầu miễn phí</button>
-                </div>
-                <div class="pricing-card glassmorphism featured">
-                    <div class="pricing-badge">Phổ biến</div>
-                    <div class="pricing-header">
-                        <h3>Pro</h3>
-                        <div class="price">
-                            <span class="amount">99.000</span>
-                            <span class="period">VNĐ/tháng</span>
-                        </div>
-                    </div>
-                    <ul class="pricing-features">
-                        <li><i class="fas fa-check"></i> 10.000 từ/tháng</li>
-                        <li><i class="fas fa-check"></i> 50+ ngôn ngữ</li>
-                        <li><i class="fas fa-check"></i> Lịch sử không giới hạn</li>
-                        <li><i class="fas fa-check"></i> Hỗ trợ tài liệu đầy đủ</li>
-                        <li><i class="fas fa-check"></i> API access</li>
-                    </ul>
-                    <button class="btn-primary featured" onclick="window.location.href='auth.html'">Đăng ký Pro</button>
-                </div>
-                <div class="pricing-card glassmorphism">
-                    <div class="pricing-header">
-                        <h3>Enterprise</h3>
-                        <div class="price">
-                            <span class="amount">Liên hệ</span>
-                            <span class="period"></span>
-                        </div>
-                    </div>
-                    <ul class="pricing-features">
-                        <li><i class="fas fa-check"></i> Số lượng không giới hạn</li>
-                        <li><i class="fas fa-check"></i> Tất cả ngôn ngữ</li>
-                        <li><i class="fas fa-check"></i> Hỗ trợ 24/7</li>
-                        <li><i class="fas fa-check"></i> Tích hợp tùy chỉnh</li>
-                        <li><i class="fas fa-check"></i> SLA đảm bảo</li>
-                    </ul>
-                    <button class="btn-secondary" onclick="window.location.href='contact.html'">Liên hệ chúng tôi</button>
-                </div>
-            </div>
+      <div class="container">
+        <div class="section-header">
+          <h2>Bảng giá</h2>
+          <p>Chọn gói phù hợp với nhu cầu của bạn</p>
         </div>
-    <section id="stats" class="stats">
-        <div class="container">
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-number" data-target="1000000">0</div>
-                    <div class="stat-label">Bản dịch đã thực hiện</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number" data-target="50000">0</div>
-                    <div class="stat-label">Người dùng hài lòng</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number" data-target="99">0</div>
-                    <div class="stat-label">Độ chính xác (%)</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number" data-target="50">0</div>
-                    <div class="stat-label">Ngôn ngữ hỗ trợ</div>
-                </div>
+        <div class="pricing-grid">
+          <div class="pricing-card glassmorphism">
+            <div class="pricing-header">
+              <h3>Miễn phí</h3>
+              <div class="price">
+                <span class="amount">0đ</span>
+                <span class="period">/tháng</span>
+              </div>
             </div>
+            <ul class="pricing-features">
+              <li><i class="fas fa-check"></i> 5.000 từ/tháng</li>
+              <li>
+                <i class="fas fa-check"></i> 3 file/tháng (PDF/DOCX/XLSX/TXT)
+              </li>
+              <li><i class="fas fa-check"></i> Giữ định dạng cơ bản</li>
+              <li><i class="fas fa-check"></i> Lịch sử 7 ngày</li>
+              <li><i class="fas fa-times"></i> Không có ưu tiên xử lý</li>
+            </ul>
+            <button
+              class="btn-primary"
+              onclick="window.location.href = 'auth.html'"
+            >
+              Bắt đầu miễn phí
+            </button>
+          </div>
+          <div class="pricing-card glassmorphism featured">
+            <div class="pricing-badge">Phổ biến</div>
+            <div class="pricing-header">
+              <h3>Pro</h3>
+              <div class="price">
+                <span class="amount">99.000 VNĐ</span>
+                <span class="period">/tháng</span>
+              </div>
+            </div>
+            <ul class="pricing-features">
+              <li><i class="fas fa-check"></i> 120.000 từ/tháng</li>
+              <li><i class="fas fa-check"></i> 120 file/tháng</li>
+              <li><i class="fas fa-check"></i> 100+ ngôn ngữ</li>
+              <li><i class="fas fa-check"></i> Giữ định dạng nâng cao</li>
+              <li><i class="fas fa-check"></i> Lịch sử không giới hạn</li>
+            </ul>
+            <button
+              class="btn-primary featured"
+              onclick="window.location.href = 'auth.html'"
+            >
+              Đăng ký Pro
+            </button>
+          </div>
+          <div class="pricing-card glassmorphism">
+            <div class="pricing-header">
+              <h3>ProMax</h3>
+              <div class="price">
+                <span class="amount">199.000 VNĐ</span>
+                <span class="period">/tháng</span>
+              </div>
+            </div>
+            <ul class="pricing-features">
+              <li><i class="fas fa-check"></i> 300.000 từ/tháng</li>
+              <li><i class="fas fa-check"></i> 300 file/tháng</li>
+              <li><i class="fas fa-check"></i> Ưu tiên xử lý (Priority)</li>
+              <li>
+                <i class="fas fa-check"></i> Glossary + kiểm tra nhất quán
+              </li>
+              <li>
+                <i class="fas fa-check"></i> Xuất file linh hoạt (TXT/HTML +
+                theo định dạng)
+              </li>
+            </ul>
+            <button
+              class="btn-secondary"
+              onclick="window.location.href = 'auth.html'"
+            >
+              Nâng cấp ProMax
+            </button>
+          </div>
         </div>
+      </div>
     </section>
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <h3>AI Translator</h3>
-                    <p>Hệ thống dịch thuật thông minh với công nghệ AI tiên tiến</p>
-                    <div class="social-links">
-                        <a href="#"><i class="fab fa-facebook"></i></a>
-                        <a href="#"><i class="fab fa-twitter"></i></a>
-                        <a href="#"><i class="fab fa-linkedin"></i></a>
-                        <a href="#"><i class="fab fa-github"></i></a>
-                    </div>
-                </div>
-                <div class="footer-section">
-                    <h3>Sản phẩm</h3>
-                    <ul>
-                        <li><a href="#features">Tính năng</a></li>
-                        <li><a href="#pricing">Giá cả</a></li>
-                        <li><a href="about.html">Về chúng tôi</a></li>
-                        <li><a href="contact.html">Liên hệ</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h3>Hỗ trợ</h3>
-                    <ul>
-                        <li><a href="#">Câu hỏi thường gặp</a></li>
-                        <li><a href="#">Hướng dẫn sử dụng</a></li>
-                        <li><a href="#">API Documentation</a></li>
-                        <li><a href="#">Trạng thái hệ thống</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h3>Pháp lý</h3>
-                    <ul>
-                        <li><a href="#">Điều khoản sử dụng</a></li>
-                        <li><a href="#">Chính sách bảo mật</a></li>
-                        <li><a href="#">Cookie Policy</a></li>
-                        <li><a href="#">GDPR</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2026 AI Translation System. All rights reserved.</p>
-            </div>
+
+    <section id="use-cases" class="features" style="padding-top: 40px">
+      <div class="container">
+        <div class="section-header">
+          <h2>Dành cho nhiều nhu cầu</h2>
+          <p>Tối ưu cho dịch tài liệu, học tập, kỹ thuật và hành chính</p>
         </div>
+        <div class="features-grid">
+          <div class="feature-card glassmorphism">
+            <div class="feature-icon">
+              <i class="fas fa-file-signature"></i>
+            </div>
+            <h3>Hành chính – văn bản</h3>
+            <p>
+              Giữ bố cục, tiêu đề, bullet; phù hợp biên bản, công văn, hợp đồng.
+            </p>
+          </div>
+          <div class="feature-card glassmorphism">
+            <div class="feature-icon"><i class="fas fa-sitemap"></i></div>
+            <h3>Kỹ thuật – báo cáo</h3>
+            <p>
+              Ổn định thuật ngữ, hạn chế sai số đơn vị, số liệu; hỗ trợ bảng.
+            </p>
+          </div>
+          <div class="feature-card glassmorphism">
+            <div class="feature-icon">
+              <i class="fas fa-graduation-cap"></i>
+            </div>
+            <h3>Học tập – nghiên cứu</h3>
+            <p>
+              Dịch đoạn dài, giữ trích dẫn; tiện copy, tải xuống, lưu lịch sử.
+            </p>
+          </div>
+          <div class="feature-card glassmorphism">
+            <div class="feature-icon"><i class="fas fa-bullhorn"></i></div>
+            <h3>Marketing – nội dung</h3>
+            <p>
+              Ưu tiên tự nhiên, mạch lạc; phù hợp nội dung web, email, giới
+              thiệu.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="how-it-works" style="padding-top: 40px">
+      <div class="container">
+        <div class="section-header">
+          <h2>Câu hỏi thường gặp</h2>
+          <p>Một vài câu trả lời nhanh trước khi bạn bắt đầu</p>
+        </div>
+        <div class="glassmorphism" style="padding: 18px 18px 8px">
+          <details style="margin-bottom: 12px">
+            <summary style="cursor: pointer; font-weight: 700; color: #fff">
+              Dịch có giữ định dạng không?
+            </summary>
+            <p style="margin-top: 10px; color: rgba(255, 255, 255, 0.85)">
+              Có. Với văn bản, bật <strong>Rich editor</strong> và
+              <strong>Giữ định dạng</strong>. Với tài liệu, hệ thống sẽ cố gắng
+              giữ heading/bảng/bullet tùy định dạng đầu vào.
+            </p>
+          </details>
+          <details style="margin-bottom: 12px">
+            <summary style="cursor: pointer; font-weight: 700; color: #fff">
+              Tôi có thể tải file đã dịch ở đâu?
+            </summary>
+            <p style="margin-top: 10px; color: rgba(255, 255, 255, 0.85)">
+              Sau khi upload tài liệu, hệ thống sẽ xử lý và tự động tạo link tải
+              xuống. Bạn cũng có thể xem lại trong <strong>Lịch sử</strong>.
+            </p>
+          </details>
+          <details style="margin-bottom: 12px">
+            <summary style="cursor: pointer; font-weight: 700; color: #fff">
+              Dữ liệu của tôi có an toàn không?
+            </summary>
+            <p style="margin-top: 10px; color: rgba(255, 255, 255, 0.85)">
+              Hệ thống chỉ lưu những gì cần thiết để bạn xem lịch sử và tải kết
+              quả; bạn có thể xóa lịch sử bất cứ lúc nào trong Dashboard.
+            </p>
+          </details>
+          <details style="margin-bottom: 12px">
+            <summary style="cursor: pointer; font-weight: 700; color: #fff">
+              Tại sao bản dịch đôi khi bị cắt ngắn?
+            </summary>
+            <p style="margin-top: 10px; color: rgba(255, 255, 255, 0.85)">
+              Một số giới hạn phụ thuộc gói và độ dài đầu vào. Nếu bạn dịch tài
+              liệu dài, hãy dùng upload tài liệu hoặc nâng gói để tăng hạn mức.
+            </p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section id="stats" class="stats">
+      <div class="container">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-number" data-target="1000000">0</div>
+            <div class="stat-label">Bản dịch đã thực hiện</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number" data-target="50000">0</div>
+            <div class="stat-label">Người dùng hài lòng</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number" data-target="99">0</div>
+            <div class="stat-label">Độ chính xác (%)</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number" data-target="50">0</div>
+            <div class="stat-label">Ngôn ngữ hỗ trợ</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-content">
+          <div class="footer-section">
+            <h3>AI Translator</h3>
+            <p>Hệ thống dịch thuật thông minh với công nghệ AI tiên tiến</p>
+            <div class="social-links">
+              <a href="#"><i class="fab fa-facebook"></i></a>
+              <a href="#"><i class="fab fa-twitter"></i></a>
+              <a href="#"><i class="fab fa-linkedin"></i></a>
+              <a href="#"><i class="fab fa-github"></i></a>
+            </div>
+          </div>
+          <div class="footer-section">
+            <h3>Sản phẩm</h3>
+            <ul>
+              <li><a href="#features">Tính năng</a></li>
+              <li><a href="#pricing">Giá cả</a></li>
+              <li><a href="about.html">Về chúng tôi</a></li>
+              <li><a href="contact.html">Liên hệ</a></li>
+            </ul>
+          </div>
+          <div class="footer-section">
+            <h3>Hỗ trợ</h3>
+            <ul>
+              <li><a href="#">Câu hỏi thường gặp</a></li>
+              <li><a href="#">Hướng dẫn sử dụng</a></li>
+              <li><a href="#">API Documentation</a></li>
+              <li><a href="#">Trạng thái hệ thống</a></li>
+            </ul>
+          </div>
+          <div class="footer-section">
+            <h3>Pháp lý</h3>
+            <ul>
+              <li><a href="#">Điều khoản sử dụng</a></li>
+              <li><a href="#">Chính sách bảo mật</a></li>
+              <li><a href="#">Cookie Policy</a></li>
+              <li><a href="#">GDPR</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p>&copy; 2026 AI Translation System. All rights reserved.</p>
+        </div>
+      </div>
     </footer>
 
     <script src="/js/home.js"></script>
-</body>
+  </body>
 </html>

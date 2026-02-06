@@ -1,6 +1,6 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import db, Payment
+from app.models import db, Payment, User
 from app.services.payment_service import PaymentService
 
 payment_bp = Blueprint('payment', __name__)
@@ -14,7 +14,12 @@ def create_payment():
     currency = data.get('currency', 'VND')
     
     user_id = get_jwt_identity()
-    user = db.session.query(db.session.query(User).filter_by(google_id=user_id).first()).first()
+    user = User.query.filter_by(google_id=user_id).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    if amount is None:
+        return jsonify({"error": "amount is required"}), 400
     
     payment_url = payment_service.create_payment(amount, currency)
     
@@ -36,3 +41,33 @@ def check_payment_status(payment_id):
     if payment:
         return jsonify({"status": payment.status}), 200
     return jsonify({"error": "Payment not found"}), 404
+
+
+@payment_bp.route('/dev/activate-plan', methods=['POST'])
+@jwt_required()
+def dev_activate_plan():
+    """Dev helper: activate a plan immediately (no payment verification).
+
+    This is only enabled when DEBUG=True.
+    """
+    if not current_app.config.get('DEBUG'):
+        return jsonify({"error": "Not available"}), 404
+
+    data = request.get_json(silent=True) or {}
+    plan = str(data.get('plan') or '').strip().lower()
+    allowed = {'free', 'pro', 'promax'}
+    if plan not in allowed:
+        return jsonify({"error": "Invalid plan", "allowed": sorted(list(allowed))}), 400
+
+    user_google_id = get_jwt_identity()
+    user = User.query.filter_by(google_id=user_google_id).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user.plan = plan
+    db.session.commit()
+
+    return jsonify({
+        "plan": user.plan,
+        "plan_name": {"free": "Free", "pro": "Pro", "promax": "ProMax"}[plan]
+    }), 200

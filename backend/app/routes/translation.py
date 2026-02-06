@@ -28,8 +28,29 @@ def translate_text():
     user_id = get_jwt_identity()
     user = User.query.filter_by(google_id=user_id).first() if user_id else None
 
+    # Enforce daily quota if user exists
+    if user:
+        from datetime import datetime
+        today = datetime.utcnow().date()
+        try:
+            used_today = Translation.query.filter(
+                Translation.user_id == user.id,
+                db.func.date(Translation.created_at) == today
+            ).count()
+        except Exception:
+            used_today = 0
+        plan = (user.plan or 'free')
+        plan_quota = {'free': 170, 'pro': 4000, 'promax': 10000}.get(plan, 170)
+        if plan_quota > 0 and used_today >= plan_quota:
+            return jsonify({"error": "Quota exceeded for today", "quota": plan_quota}), 402
+
+    is_html = data.get('is_html', False)
+
     try:
-        translated_text = translation_service.translate_text(text, source_lang, target_lang)
+        if is_html:
+            translated_text = translation_service.translate_html(text, source_lang, target_lang)
+        else:
+            translated_text = translation_service.translate_text(text, source_lang, target_lang)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except RuntimeError as e:
@@ -37,15 +58,15 @@ def translate_text():
 
     translation = Translation(
         user_id=user.id if user else None,
-        original_text=text,
-        translated_text=translated_text,
+        original_text=(text[:5000] + '...') if len(text) > 5000 else text,
+        translated_text=(translated_text[:5000] + '...') if len(translated_text) > 5000 else translated_text,
         source_lang=source_lang,
         target_lang=target_lang
     )
     db.session.add(translation)
     db.session.commit()
 
-    return jsonify({"translated_text": translated_text}), 200
+    return jsonify({"translated_text": translated_text, "is_html": bool(is_html)}), 200
 
 @translation_bp.route('/document', methods=['POST'])
 @jwt_required(optional=True)
@@ -108,15 +129,91 @@ def document_status(job_id):
     }), 200
 
 
+@translation_bp.route('/save', methods=['POST'])
+@jwt_required()
+def save_translation():
+    """Explicitly save a translation from the dashboard UI.
+
+    Note: /text already persists translations; this endpoint exists to keep the
+    dashboard "Lưu" button functional and supports idempotent re-saves.
+    """
+    data = request.get_json(silent=True) or {}
+    original_text = data.get('original_text')
+    translated_text = data.get('translated_text')
+    source_lang = (data.get('source_lang') or 'auto').strip() if data.get('source_lang') else 'auto'
+    target_lang = data.get('target_lang')
+
+    if not original_text or not str(original_text).strip():
+        return jsonify({'error': 'original_text is required'}), 400
+    if not translated_text or not str(translated_text).strip():
+        return jsonify({'error': 'translated_text is required'}), 400
+    if not target_lang or not str(target_lang).strip():
+        return jsonify({'error': 'target_lang is required'}), 400
+
+    user_google_id = get_jwt_identity()
+    user = User.query.filter_by(google_id=user_google_id).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    # Best-effort idempotency: if the same record was saved very recently, reuse it.
+    from datetime import datetime, timedelta
+    window_start = datetime.utcnow() - timedelta(minutes=2)
+    existing = Translation.query.filter(
+        Translation.user_id == user.id,
+        Translation.source_lang == source_lang,
+        Translation.target_lang == target_lang,
+        Translation.created_at >= window_start,
+        Translation.original_text == original_text,
+        Translation.translated_text == translated_text,
+    ).order_by(Translation.created_at.desc()).first()
+    if existing:
+        return jsonify({'message': 'already_saved', 'id': existing.id}), 200
+
+    translation = Translation(
+        user_id=user.id,
+        original_text=(str(original_text)[:5000] + '...') if len(str(original_text)) > 5000 else str(original_text),
+        translated_text=(str(translated_text)[:5000] + '...') if len(str(translated_text)) > 5000 else str(translated_text),
+        source_lang=source_lang,
+        target_lang=str(target_lang).strip(),
+    )
+    db.session.add(translation)
+    db.session.commit()
+    return jsonify({'message': 'saved', 'id': translation.id}), 201
+
+
 @translation_bp.route('/history', methods=['GET'])
 @jwt_required(optional=True)
 def get_history():
-    user_id = get_jwt_identity()
-    user = User.query.filter_by(google_id=user_id).first() if user_id else None
+    user_google_id = get_jwt_identity()
+    user = User.query.filter_by(google_id=user_google_id).first() if user_google_id else None
     if not user:
-        return jsonify({'translations': []}), 200
+        return jsonify({'translations': [], 'total': 0, 'pages': 0, 'current_page': 1}), 200
 
-    translations = Translation.query.filter_by(user_id=user.id).order_by(Translation.created_at.desc()).all()
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    filter_type = (request.args.get('type') or 'all').strip().lower()
+    date_str = (request.args.get('date') or '').strip()
+
+    q = Translation.query.filter(Translation.user_id == user.id)
+
+    # Filter by type (text/document)
+    if filter_type == 'text':
+        q = q.filter(Translation.file_path.is_(None))
+    elif filter_type == 'document':
+        q = q.filter(Translation.file_path.isnot(None))
+
+    # Optional date filter: YYYY-MM-DD (UTC date)
+    if date_str:
+        from datetime import datetime
+        try:
+            d = datetime.strptime(date_str, '%Y-%m-%d').date()
+            q = q.filter(db.func.date(Translation.created_at) == d)
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    q = q.order_by(Translation.created_at.desc())
+    pagination = q.paginate(page=page, per_page=per_page, error_out=False)
+
     history = [{
         'id': t.id,
         'original_text': t.original_text,
@@ -125,6 +222,11 @@ def get_history():
         'target_lang': t.target_lang,
         'created_at': t.created_at.isoformat(),
         'has_file': bool(t.file_path)
-    } for t in translations]
-    
-    return jsonify({'translations': history}), 200
+    } for t in pagination.items]
+
+    return jsonify({
+        'translations': history,
+        'total': pagination.total,
+        'pages': pagination.pages,
+        'current_page': pagination.page,
+    }), 200

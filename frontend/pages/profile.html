@@ -54,8 +54,11 @@
                   type="email"
                   id="profile-email"
                   placeholder="Email"
-                  required
+                  readonly
                 />
+                <small style="color: rgba(255, 255, 255, 0.65)">
+                  Email được lấy từ Google và không thay đổi ở đây.
+                </small>
               </div>
             </div>
 
@@ -66,6 +69,26 @@
                 id="profile-avatar"
                 placeholder="https://..."
               />
+              <div
+                class="avatar-preview"
+                style="
+                  margin-top: 10px;
+                  display: flex;
+                  align-items: center;
+                  gap: 10px;
+                "
+              >
+                <div
+                  id="avatarCircle"
+                  class="nav-user-avatar"
+                  style="width: 48px; height: 48px; font-size: 18px"
+                >
+                  U
+                </div>
+                <small style="color: rgba(255, 255, 255, 0.65)">
+                  Dán link ảnh (png/jpg/webp). Nếu lỗi sẽ tự fallback chữ cái.
+                </small>
+              </div>
             </div>
 
             <div class="form-group">
