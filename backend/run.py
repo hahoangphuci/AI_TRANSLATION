@@ -124,13 +124,7 @@ def game_leaderboard():
     return jsonify(leaderboard)
 
 if __name__ == '__main__':
-    print("=" * 60)
-    print("🚀 KHỞI ĐỘNG AI TRANSLATION SYSTEM")
-    print("=" * 60)
-    print("📡 Server đang chạy: http://127.0.0.1:5000")
+    # Chỉ in thông tin Trang chủ để không gây lộn xộn khi khởi động
     print("🏠 Trang chủ: http://127.0.0.1:5000")
-    print("📱 Network Access: http://192.168.1.11:5000")
-    print("\n💡 Mở browser và truy cập: http://127.0.0.1:5000")
-    print("=" * 60)
 
     app.run(host='0.0.0.0', port=5000, debug=True)

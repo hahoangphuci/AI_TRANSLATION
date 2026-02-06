@@ -7,25 +7,42 @@ document.addEventListener("DOMContentLoaded", function () {
   const msg = document.getElementById("profile-message");
   const avatarCircle = document.getElementById("avatarCircle");
 
-<<<<<<< HEAD
-  async function loadProfileFromBackendIfPossible() {
-    const token = localStorage.getItem("token");
-    if (!token || String(token).startsWith("fake")) return null;
+  function getInitials(name) {
+    const s = String(name || "U").trim();
+    return (s[0] || "U").toUpperCase();
+  }
 
-    try {
-      const res = await fetch("/api/auth/profile", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (e) {
-      console.warn("Failed to fetch /api/auth/profile", e);
-      return null;
+  function setAvatarPreview(name, avatarUrl) {
+    if (!avatarCircle) return;
+    const initials = getInitials(name);
+    if (!avatarUrl) {
+      avatarCircle.innerHTML = initials;
+      return;
+    }
+    // Render img; fallback to initials on error
+    avatarCircle.innerHTML = `
+      <img src="${escapeHtml(avatarUrl)}" alt="avatar" referrerpolicy="no-referrer" />
+    `;
+    const img = avatarCircle.querySelector("img");
+    if (img) {
+      img.onerror = () => {
+        avatarCircle.textContent = initials;
+      };
     }
   }
 
-=======
-  function getInitials(name) {
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>\"]/g, (m) => {
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+      }[m];
+    });
+  }
+
+  async function loadProfileFromBackendIfPossible() {  function getInitials(name) {
     const s = String(name || "U").trim();
     return (s[0] || "U").toUpperCase();
   }
@@ -93,12 +110,26 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (merged.name) nameInput.value = merged.name;
     if (merged.email) emailInput.value = merged.email;
-<<<<<<< HEAD
-    if (merged.avatarUrl) avatarInput.value = merged.avatarUrl;
+    if (merged.avatarUrl || merged.avatar_url)
+      avatarInput.value = merged.avatarUrl || merged.avatar_url;
     if (merged.bio) bioInput.value = merged.bio;
+
+    setAvatarPreview(merged.name, merged.avatarUrl || merged.avatar_url);
   })();
 
-  form.addEventListener("submit", function (e) {
+  if (avatarInput) {
+    avatarInput.addEventListener("input", () => {
+      setAvatarPreview(nameInput.value, avatarInput.value.trim());
+    });
+  }
+
+  if (nameInput) {
+    nameInput.addEventListener("input", () => {
+      setAvatarPreview(nameInput.value, avatarInput.value.trim());
+    });
+  }
+
+  async function patchProfileToBackendIfPossible(user) {
 =======
     if (merged.avatarUrl || merged.avatar_url)
       avatarInput.value = merged.avatarUrl || merged.avatar_url;

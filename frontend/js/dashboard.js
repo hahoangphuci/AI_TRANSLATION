@@ -314,42 +314,97 @@ class TranslationManager {
     const richInput = document.getElementById("richInput");
     const charCount = document.getElementById("charCount");
     const richToggle = document.getElementById("richToggle");
+    const preserveCheck = document.getElementById("preserveFormatting");
     const toolbar = document.getElementById("editorToolbar");
 
     const updateCharCount = () => {
       let text = "";
-      if (richToggle && richToggle.checked && richInput)
-        text = richInput.innerText || "";
+      if (richToggle && richToggle.checked && richInput) text = richInput.innerText || "";
       else if (inputText) text = inputText.value || "";
       const count = text.length;
       charCount.textContent = count;
-      charCount.style.color =
-        count > 5000 ? "#00A8FF" : "rgba(255,255,255,0.7)";
+      charCount.style.color = count > 5000 ? "#00A8FF" : "rgba(255,255,255,0.7)";
     };
 
     if (inputText) inputText.addEventListener("input", updateCharCount);
     if (richInput) richInput.addEventListener("input", updateCharCount);
 
+    // Helper to copy plain -> rich, preserving any previous saved HTML
+    const loadPlainToRich = () => {
+      // If we have stored HTML, reuse it (user switched off preserve earlier)
+      const storedHtml = richInput.dataset._lastHtml;
+      if (storedHtml) {
+        richInput.innerHTML = storedHtml;
+        return;
+      }
+      // Otherwise convert plaintext newlines to <br>
+      richInput.innerHTML = (inputText.value || "").replace(/\n/g, "<br>");
+    };
+
+    // Helper to save rich HTML for later restoration
+    const saveRichHtml = () => {
+      try {
+        richInput.dataset._lastHtml = richInput.innerHTML || "";
+      } catch (e) {
+        // ignore
+      }
+    };
+
     if (richToggle) {
       richToggle.addEventListener("change", (e) => {
         const checked = e.target.checked;
         if (checked) {
+          // Enable toolbar and rich input
           richInput.style.display = "block";
           inputText.style.display = "none";
           toolbar && (toolbar.style.display = "flex");
-          // copy current plain text into rich editor as simple HTML
-          richInput.innerHTML = (inputText.value || "").replace(/\n/g, "<br>");
+          // Load content to rich editor
+          loadPlainToRich();
           richInput.focus();
+          // Preserve checkbox makes sense only when rich editor is active
+          if (preserveCheck) preserveCheck.disabled = false;
         } else {
+          // When turning off rich editor: save HTML if user wanted to preserve it
+          if (preserveCheck && preserveCheck.checked) {
+            saveRichHtml();
+          } else {
+            // clear stored html to avoid unexpected restores
+            if (richInput.dataset._lastHtml) delete richInput.dataset._lastHtml;
+          }
+
           richInput.style.display = "none";
           inputText.style.display = "block";
           toolbar && (toolbar.style.display = "none");
-          inputText.value =
-            richInput && richInput.innerText
-              ? richInput.innerText
-              : inputText.value;
+          // Convert rich to plain text for textarea
+          inputText.value = richInput && richInput.innerText ? richInput.innerText : inputText.value;
+          // Disable preserve formatting when rich editor is off
+          if (preserveCheck) {
+            preserveCheck.checked = false;
+            preserveCheck.disabled = true;
+          }
         }
         updateCharCount();
+      });
+
+      // Initialize state: if preserve is checked, ensure rich editor is on
+      if (preserveCheck && preserveCheck.checked && !richToggle.checked) {
+        richToggle.checked = true;
+        richToggle.dispatchEvent(new Event('change'));
+      }
+    }
+
+    // If user checks 'preserve formatting' while rich is off, auto-enable rich editor
+    if (preserveCheck) {
+      preserveCheck.addEventListener('change', (e) => {
+        if (e.target.checked && richToggle && !richToggle.checked) {
+          richToggle.checked = true;
+          richToggle.dispatchEvent(new Event('change'));
+          UIManager.showNotification('Bật Rich editor để giữ định dạng', 'info');
+        }
+        // if user unchecks preserve while rich on, clear stored html
+        if (!e.target.checked && richInput && richInput.dataset._lastHtml) {
+          delete richInput.dataset._lastHtml;
+        }
       });
     }
 
@@ -390,8 +445,7 @@ class TranslationManager {
     }
 
     // hide toolbar initially if not active
-    if (toolbar && (!richToggle || !richToggle.checked))
-      toolbar.style.display = "none";
+    if (toolbar && (!richToggle || !richToggle.checked)) toolbar.style.display = "none";
   }
 
   async translateText() {
@@ -528,17 +582,32 @@ class TranslationManager {
     }
   }
 
+  sanitizeHTML(s) {
+    if (!s) return "";
+    // Very small sanitizer: remove <script> blocks and on* attributes to avoid inline JS
+    try {
+      let out = String(s);
+      // Remove script tags
+      out = out.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "");
+      // Remove on* attributes (onclick, onerror, etc.)
+      out = out.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+      return out;
+    } catch (e) {
+      return String(s);
+    }
+  }
+
   showTranslationResult(translatedText, isHtml) {
     const resultDiv = document.getElementById("translationResult");
     const outputDiv = document.getElementById("outputText");
     const previewPane = document.getElementById("previewPane");
     const preserve = document.getElementById("preserveFormatting")?.checked;
 
-    // If result is HTML or user requested preserve, render as HTML in preview
+    // If result is HTML or user requested preserve, render as HTML in preview (sanitized)
     if (isHtml || preserve) {
       if (previewPane)
-        previewPane.innerHTML = translatedText || "<em>Không có kết quả</em>";
-      // For plain text output area, also show escaped text (strip tags)
+        previewPane.innerHTML = this.sanitizeHTML(translatedText) || "<em>Không có kết quả</em>";
+      // For plain text output area, also show stripped text
       outputDiv.textContent = (translatedText || "").replace(/<[^>]*>/g, "");
     } else {
       outputDiv.textContent = translatedText;

@@ -9,10 +9,7 @@
       if (!response.ok) return null;
       const profile = await response.json();
       if (profile && (profile.name || profile.email)) {
-<<<<<<< HEAD
-=======
         // Merge with any existing local-only fields
->>>>>>> da00585 (đổi sqlite sang mysql(mysqlxampp)mysqlxampp)
         let existing = null;
         try {
           existing = JSON.parse(localStorage.getItem("user") || "null");
@@ -38,10 +35,7 @@
       localStorage.setItem("token", urlToken);
       await fetchProfileAndCache(urlToken);
 
-<<<<<<< HEAD
-=======
       // Clean URL (remove token but keep other params)
->>>>>>> da00585 (đổi sqlite sang mysql(mysqlxampp)mysqlxampp)
       params.delete("token");
       const qs = params.toString();
       const newUrl =
@@ -82,10 +76,7 @@
     userWrap.className = "nav-user";
     const initials = (user.name || "U").trim()[0].toUpperCase();
     const secondary = user.email || "CodeQuest Member";
-<<<<<<< HEAD
-=======
     const avatarUrl = user.avatarUrl || user.avatar_url;
->>>>>>> da00585 (đổi sqlite sang mysql(mysqlxampp)mysqlxampp)
     userWrap.innerHTML = `
       <div class="nav-user-button" tabindex="0">
         <div class="nav-user-avatar">
@@ -150,10 +141,7 @@
     // Remove any existing user UI
     navLinks.querySelectorAll(".nav-user").forEach((el) => el.remove());
 
-<<<<<<< HEAD
-=======
     // Hide/remove any static logout button if present (prevents showing only "Đăng xuất" when not logged in)
->>>>>>> da00585 (đổi sqlite sang mysql(mysqlxampp)mysqlxampp)
     const staticLogout = navLinks.querySelector("#logoutBtn");
     if (staticLogout) staticLogout.remove();
 
@@ -183,15 +171,10 @@
   }
 
   async function init() {
-<<<<<<< HEAD
-    await consumeTokenFromUrlIfPresent();
-
-=======
     // 1) Support OAuth redirect that includes ?token=...
     await consumeTokenFromUrlIfPresent();
 
     // 2) If we have a token but missing user fields, fetch profile
->>>>>>> da00585 (đổi sqlite sang mysql(mysqlxampp)mysqlxampp)
     const token = localStorage.getItem("token");
     let user = getUser();
     if (token && (!user || (!user.email && !user.name))) {

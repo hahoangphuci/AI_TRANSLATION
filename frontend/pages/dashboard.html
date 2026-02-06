@@ -178,9 +178,10 @@
                             <input type="checkbox" id="richToggle" />
                             <span>Rich editor</span>
                           </label>
-                          <label class="toggle small">
-                            <input type="checkbox" id="preserveFormatting" />
+                          <label class="toggle small" title="Giữ định dạng yêu cầu bật Rich editor. Nếu chưa bật, lựa chọn này sẽ bật Rich editor tự động.">
+                            <input type="checkbox" id="preserveFormatting" aria-describedby="preserve-help" />
                             <span>Giữ định dạng</span>
+                            <button type="button" class="help-inline" id="preserve-help" aria-hidden="true" title="Giữ định dạng sẽ gửi HTML (sau khi bật Rich editor) để cố gắng bảo toàn cấu trúc.">?</button>
                           </label>
                         </div>
                       </div>
