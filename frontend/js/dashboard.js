@@ -327,18 +327,50 @@ class TranslationManager {
     };
 
     if (inputText) inputText.addEventListener("input", updateCharCount);
-    if (richInput) richInput.addEventListener("input", updateCharCount);
+    if (richInput) {
+      richInput.addEventListener("input", (e) => {
+        updateCharCount();
+        try { richInput.dataset._isPristine = 'false'; } catch (er) {}
+      });
+    }
 
-    // Helper to copy plain -> rich, preserving any previous saved HTML
+    // Small helpers: escape plaintext for HTML and convert HTML back to plain text (preserve newlines)
+    const escapeForHTML = (s) =>
+      String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+
+    const htmlToPlainText = (html) => {
+      const tmp = document.createElement("div");
+      // Convert <br> to newlines first so they are preserved
+      tmp.innerHTML = (html || "").replace(/<br\s*\/?>(\s*)/gi, "<br />");
+      // Then read textContent to get proper unescaped text with newlines
+      // Replace <br> tags with newline characters
+      const withLineBreaks = String(tmp.innerHTML).replace(/<br\s*\/?>/gi, "\n");
+      tmp.innerHTML = withLineBreaks;
+      return tmp.textContent || tmp.innerText || "";
+    };
+
+    // Helper to copy plain -> rich, preserving any previous saved HTML and keeping original plaintext intact
     const loadPlainToRich = () => {
-      // If we have stored HTML, reuse it (user switched off preserve earlier)
+      // If we have stored HTML (user previously edited and saved), reuse it
       const storedHtml = richInput.dataset._lastHtml;
       if (storedHtml) {
         richInput.innerHTML = storedHtml;
+        // Mark as not pristine because stored HTML implies user edited it before
+        richInput.dataset._isPristine = 'false';
         return;
       }
-      // Otherwise convert plaintext newlines to <br>
-      richInput.innerHTML = (inputText.value || "").replace(/\n/g, "<br>");
+
+      // Otherwise insert the plaintext inside a wrapper that preserves whitespace exactly
+      const plain = inputText.value || "";
+      // Save original plain for exact restoration if user doesn't edit the rich contents
+      richInput.dataset._plainOriginal = plain;
+      richInput.dataset._isPristine = 'true';
+      // Use escaped content inside a pre-wrap container so it appears visually identical
+      richInput.innerHTML = `<div class="plain-preserve" style="white-space: pre-wrap;">${escapeForHTML(plain)}</div>`;
     };
 
     // Helper to save rich HTML for later restoration
@@ -375,8 +407,13 @@ class TranslationManager {
           richInput.style.display = "none";
           inputText.style.display = "block";
           toolbar && (toolbar.style.display = "none");
-          // Convert rich to plain text for textarea
-          inputText.value = richInput && richInput.innerText ? richInput.innerText : inputText.value;
+          // If the rich content is still pristine (user didn't edit it), restore original plaintext exactly
+          if (richInput && richInput.dataset && richInput.dataset._isPristine === 'true' && richInput.dataset._plainOriginal !== undefined) {
+            inputText.value = richInput.dataset._plainOriginal;
+          } else {
+            // Otherwise convert edited HTML to plain text reliably
+            inputText.value = richInput ? htmlToPlainText(richInput.innerHTML) : inputText.value;
+          }
           // Disable preserve formatting when rich editor is off
           if (preserveCheck) {
             preserveCheck.checked = false;
@@ -597,18 +634,31 @@ class TranslationManager {
     }
   }
 
+  // Decode HTML entities like &lt; &gt; &amp; into their character equivalents
+  decodeHTMLEntities(s) {
+    if (!s) return "";
+    try {
+      const txt = document.createElement('textarea');
+      txt.innerHTML = s;
+      return txt.value;
+    } catch (e) {
+      return String(s);
+    }
+  }
+
   showTranslationResult(translatedText, isHtml) {
     const resultDiv = document.getElementById("translationResult");
     const outputDiv = document.getElementById("outputText");
     const previewPane = document.getElementById("previewPane");
     const preserve = document.getElementById("preserveFormatting")?.checked;
 
-    // If result is HTML or user requested preserve, render as HTML in preview (sanitized)
+    // If result is HTML or user requested preserve, render as HTML in preview (try decode entities then sanitize)
     if (isHtml || preserve) {
-      if (previewPane)
-        previewPane.innerHTML = this.sanitizeHTML(translatedText) || "<em>Không có kết quả</em>";
+      const decoded = this.decodeHTMLEntities(translatedText);
+      const sanitized = this.sanitizeHTML(decoded);
+      if (previewPane) previewPane.innerHTML = sanitized || "<em>Không có kết quả</em>";
       // For plain text output area, also show stripped text
-      outputDiv.textContent = (translatedText || "").replace(/<[^>]*>/g, "");
+      outputDiv.textContent = (decoded || "").replace(/<[^>]*>/g, "");
     } else {
       outputDiv.textContent = translatedText;
       if (previewPane) {
