@@ -4,6 +4,7 @@ from app.models import db, Translation, User
 from app.services.translation_service import TranslationService
 from werkzeug.utils import secure_filename
 import os
+import uuid
 
 translation_bp = Blueprint('translation', __name__)
 translation_service = TranslationService()
@@ -76,6 +77,10 @@ def translate_document():
     
     file = request.files['file']
     target_lang = request.form.get('target_lang')
+    # Optional: OCR embedded images (currently applied for .docx)
+    ocr_images_raw = (request.form.get('ocr_images') or '').strip().lower()
+    ocr_images = ocr_images_raw in ('1', 'true', 'yes', 'on')
+    ocr_langs = (request.form.get('ocr_langs') or '').strip() or None
 
     if not target_lang or not str(target_lang).strip():
         return jsonify({"error": "target_lang is required"}), 400
@@ -103,9 +108,115 @@ def translate_document():
     db.session.commit()
 
     # Start background job
-    job_id = translation_service.translate_document_background(filepath, target_lang, user_id=user_id)
+    job_id = translation_service.translate_document_background(
+        filepath,
+        target_lang,
+        user_id=user_id,
+        ocr_images=ocr_images,
+        ocr_langs=ocr_langs,
+    )
 
     return jsonify({"job_id": job_id, "status_url": f"/api/translation/document/status/{job_id}"}), 202
+
+
+@translation_bp.route('/image', methods=['POST'])
+@jwt_required(optional=True)
+def translate_image():
+    """Translate text from an uploaded image using OCR."""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+    if not file or not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    source_lang = (request.form.get('source_lang') or 'auto').strip() or 'auto'
+    target_lang = (request.form.get('target_lang') or '').strip()
+    ocr_langs = (request.form.get('ocr_langs') or '').strip() or None
+    render_overlay = (request.form.get('render') or request.form.get('render_overlay') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+    if not target_lang:
+        return jsonify({"error": "target_lang is required"}), 400
+
+    # Enforce daily quota if user exists
+    user_id = get_jwt_identity()
+    user = User.query.filter_by(google_id=user_id).first() if user_id else None
+    if user:
+        from datetime import datetime
+        today = datetime.utcnow().date()
+        try:
+            used_today = Translation.query.filter(
+                Translation.user_id == user.id,
+                db.func.date(Translation.created_at) == today
+            ).count()
+        except Exception:
+            used_today = 0
+        plan = (user.plan or 'free')
+        plan_quota = {'free': 170, 'pro': 4000, 'promax': 10000}.get(plan, 170)
+        if plan_quota > 0 and used_today >= plan_quota:
+            return jsonify({"error": "Quota exceeded for today", "quota": plan_quota}), 402
+
+    # Basic extension allowlist
+    filename = secure_filename(file.filename)
+    ext = os.path.splitext(filename)[1].lower()
+    allowed = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.webp'}
+    if ext not in allowed:
+        return jsonify({"error": "Unsupported image type. Use png/jpg/jpeg/bmp/tiff/webp."}), 400
+
+    # Save to uploads with unique prefix
+    unique_name = f"{uuid.uuid4().hex}_{filename}"
+    filepath = os.path.join(UPLOAD_FOLDER, unique_name)
+    file.save(filepath)
+
+    try:
+        rendered_image_data_url = None
+
+        if render_overlay:
+            ocr_text, translated_text, png_bytes = translation_service.ocr_translate_overlay(
+                filepath,
+                source_lang=source_lang,
+                target_lang=target_lang,
+                ocr_langs=ocr_langs,
+            )
+            if not ocr_text or not str(ocr_text).strip():
+                return jsonify({"error": "OCR found no text in the image."}), 400
+            import base64
+            rendered_image_data_url = "data:image/png;base64," + base64.b64encode(png_bytes).decode('ascii')
+        else:
+            ocr_text = translation_service.ocr_image_to_text(filepath, ocr_langs=ocr_langs)
+            if not ocr_text or not str(ocr_text).strip():
+                return jsonify({"error": "OCR found no text in the image."}), 400
+            translated_text = translation_service.translate_text(ocr_text, source_lang, target_lang)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 503
+    finally:
+        # Best-effort cleanup
+        try:
+            os.remove(filepath)
+        except Exception:
+            pass
+
+    # Persist translation history
+    translation = Translation(
+        user_id=user.id if user else None,
+        original_text=(ocr_text[:5000] + '...') if len(ocr_text) > 5000 else ocr_text,
+        translated_text=(translated_text[:5000] + '...') if len(translated_text) > 5000 else translated_text,
+        source_lang=source_lang,
+        target_lang=target_lang
+    )
+    db.session.add(translation)
+    db.session.commit()
+
+    payload = {
+        "ocr_text": ocr_text,
+        "translated_text": translated_text,
+        "is_html": False
+    }
+    if render_overlay:
+        payload["rendered_image"] = rendered_image_data_url
+    return jsonify(payload), 200
 
 @translation_bp.route('/document/status/<job_id>', methods=['GET'])
 @jwt_required(optional=True)
@@ -125,7 +236,9 @@ def document_status(job_id):
         'download_url': download_url,
         'error': job.get('error'),
         'fallback': job.get('fallback', False),
-        'fallback_reason': job.get('fallback_reason')
+        'fallback_reason': job.get('fallback_reason'),
+        'ocr_summary': job.get('ocr_summary'),
+        'ocr_skipped': job.get('ocr_skipped')
     }), 200
 
 

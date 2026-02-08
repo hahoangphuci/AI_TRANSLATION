@@ -15,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
 
 # Load .env
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+# override=True so backend/.env edits are respected
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=True)
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import OperationalError

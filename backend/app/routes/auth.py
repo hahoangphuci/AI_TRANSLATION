@@ -27,8 +27,8 @@ def google_authorize():
     state = secrets.token_urlsafe(32)
     session['google_oauth_state'] = state
     
-    # Build redirect URI dynamically from request
-    redirect_uri = f"{request.scheme}://{request.host}/api/auth/google/callback"
+    # Use configured redirect URI to avoid Google blocking for private IPs
+    redirect_uri = current_app.config.get('GOOGLE_REDIRECT_URI') or f"{request.scheme}://{request.host}/api/auth/google/callback"
     
     print(f"[DEBUG] Building auth URL:")
     print(f"[DEBUG]   Client ID: {client_id[:20]}...")
@@ -75,8 +75,8 @@ def google_callback():
     if not client_id or not client_secret:
         return redirect('/auth?error=missing_credentials')
     
-    # Exchange code for tokens
-    redirect_uri = f"{request.scheme}://{request.host}/api/auth/google/callback"
+    # Exchange code for tokens using configured redirect URI
+    redirect_uri = current_app.config.get('GOOGLE_REDIRECT_URI') or f"{request.scheme}://{request.host}/api/auth/google/callback"
     
     print(f"[DEBUG] Token exchange:")
     print(f"[DEBUG]   Code: {code[:20] if code else 'None'}...")

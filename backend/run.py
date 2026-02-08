@@ -3,7 +3,8 @@ from dotenv import load_dotenv
 
 # Load .env từ thư mục backend (nơi có run.py) – bắt buộc trước khi import config hoặc TranslationService
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
-load_dotenv(_env_path)
+# override=True so changes in backend/.env take effect even if the variable already exists in OS env
+load_dotenv(_env_path, override=True)
 
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
@@ -20,6 +21,9 @@ STATIC_DIR = FRONTEND_DIR
 
 app = Flask(__name__, static_folder=os.path.join(FRONTEND_DIR, ''))
 CORS(app)
+
+# Dev: avoid stale browser cache for JS/CSS during frequent edits
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 # Configure session for OAuth flow
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -88,19 +92,28 @@ def contact_page():
 def profile_page():
     return send_from_directory(PAGES_DIR, 'profile.html')
 
+# Route cho trang history
+@app.route('/history')
+def history_page():
+    return send_from_directory(PAGES_DIR, 'history.html')
+
 # Route phục vụ các file tĩnh (css, js, images)
 @app.route('/css/<path:filename>')
 def serve_css(filename):
-    return send_from_directory(os.path.join(FRONTEND_DIR, 'css'), filename)
+    resp = send_from_directory(os.path.join(FRONTEND_DIR, 'css'), filename)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 @app.route('/js/<path:filename>')
 def serve_js(filename):
-    return send_from_directory(os.path.join(FRONTEND_DIR, 'js'), filename)
+    resp = send_from_directory(os.path.join(FRONTEND_DIR, 'js'), filename)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 # Route phục vụ trực tiếp các file HTML (để tương thích với links trong HTML)
 @app.route('/<filename>.html')
 def serve_html(filename):
-    if filename in ['home', 'auth', 'dashboard', 'about', 'contact', 'profile']:
+    if filename in ['home', 'auth', 'dashboard', 'about', 'contact', 'profile', 'history']:
         return send_from_directory(PAGES_DIR, f'{filename}.html')
     return jsonify({"error": "Page not found"}), 404
 

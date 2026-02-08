@@ -32,7 +32,7 @@
         <div class="nav-links">
           <a href="/" class="nav-link">Trang chủ</a>
           <a href="#translate" class="nav-link active">Dịch thuật</a>
-          <a href="#history" class="nav-link">Lịch sử</a>
+          <a href="/history" class="nav-link">Lịch sử</a>
           <a href="#settings" class="nav-link">Cài đặt</a>
           <button id="loginBtn" class="btn-login" style="display: none">
             <i class="fas fa-sign-in-alt"></i> Đăng nhập
@@ -120,8 +120,8 @@
             <button class="tab-btn active" onclick="showTab('translate')">
               Dịch Thuật
             </button>
-            <button class="tab-btn" onclick="showTab('history')">
-              Lịch Sử
+            <button class="tab-btn" onclick="showTab('image')">
+              Dịch ảnh (OCR)
             </button>
             <button class="tab-btn" onclick="showTab('upload')">
               Upload Tài Liệu
@@ -178,10 +178,25 @@
                             <input type="checkbox" id="richToggle" />
                             <span>Rich editor</span>
                           </label>
-                          <label class="toggle small" title="Giữ định dạng yêu cầu bật Rich editor. Nếu chưa bật, lựa chọn này sẽ bật Rich editor tự động.">
-                            <input type="checkbox" id="preserveFormatting" aria-describedby="preserve-help" />
+                          <label
+                            class="toggle small"
+                            title="Giữ định dạng yêu cầu bật Rich editor. Nếu chưa bật, lựa chọn này sẽ bật Rich editor tự động."
+                          >
+                            <input
+                              type="checkbox"
+                              id="preserveFormatting"
+                              aria-describedby="preserve-help"
+                            />
                             <span>Giữ định dạng</span>
-                            <button type="button" class="help-inline" id="preserve-help" aria-hidden="true" title="Giữ định dạng sẽ gửi HTML (sau khi bật Rich editor) để cố gắng bảo toàn cấu trúc.">?</button>
+                            <button
+                              type="button"
+                              class="help-inline"
+                              id="preserve-help"
+                              aria-hidden="true"
+                              title="Giữ định dạng sẽ gửi HTML (sau khi bật Rich editor) để cố gắng bảo toàn cấu trúc."
+                            >
+                              ?
+                            </button>
                           </label>
                         </div>
                       </div>
@@ -369,31 +384,163 @@
             </div>
           </div>
 
-          <div id="history-tab" class="tab-content">
-            <div class="history-section">
-              <h2>Lịch Sử Dịch Thuật</h2>
-              <div class="history-filters">
-                <select
-                  id="historyFilter"
-                  class="lang-select"
-                  data-placeholder="Lọc ngôn ngữ"
-                >
-                  <option value="all">Tất cả</option>
-                  <option value="text">Văn bản</option>
-                  <option value="document">Tài liệu</option>
-                </select>
-                <input type="date" id="dateFilter" />
-                <button class="btn-secondary" onclick="filterHistory()">
-                  <i class="fas fa-filter"></i> Lọc
+          <div id="image-tab" class="tab-content">
+            <div class="upload-section">
+              <h2>Dịch từ hình ảnh (OCR)</h2>
+              <div
+                class="upload-area glassmorphism"
+                id="imageUploadArea"
+                tabindex="0"
+                onclick="document.getElementById('imageInput').click()"
+              >
+                <div class="upload-icon">
+                  <i class="fas fa-image"></i>
+                </div>
+                <h3>Click để chọn ảnh, kéo thả hoặc dán (Ctrl+V)</h3>
+                <p>Định dạng hỗ trợ: PNG, JPG/JPEG, BMP, TIFF, WEBP</p>
+                <p>Gợi ý: ảnh rõ chữ sẽ OCR tốt hơn</p>
+                <p>
+                  <strong>Mẹo:</strong> bạn có thể dán ảnh từ clipboard bằng
+                  <strong>Ctrl+V</strong> ngay tại đây
+                </p>
+                <button class="btn-secondary" style="margin-top: 15px">
+                  <i class="fas fa-folder-open"></i> Chọn Ảnh
                 </button>
+                <input
+                  type="file"
+                  id="imageInput"
+                  accept="image/*,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.webp"
+                  style="display: none"
+                />
               </div>
-              <div id="historyList" class="history-list">
-                <!-- History items will be loaded here -->
+
+              <div id="imageInfo" class="file-info" style="display: none">
+                <div class="file-details">
+                  <i class="fas fa-image"></i>
+                  <span id="imageName"></span>
+                  <span id="imageSize"></span>
+                </div>
+                <div style="margin-top: 10px">
+                  <img
+                    id="imagePreview"
+                    alt="Preview"
+                    style="
+                      max-width: 100%;
+                      max-height: 240px;
+                      border-radius: 12px;
+                      display: none;
+                    "
+                  />
+                </div>
+
+                <div
+                  class="glassmorphism"
+                  id="imageResult"
+                  style="margin-top: 12px; display: none; padding: 12px"
+                >
+                  <div
+                    style="
+                      display: flex;
+                      gap: 12px;
+                      align-items: center;
+                      flex-wrap: wrap;
+                      justify-content: space-between;
+                    "
+                  >
+                    <label
+                      class="toggle small"
+                      title="Beta: thay chữ dịch lên ảnh (không hoàn hảo cho mọi font/khung chữ)."
+                    >
+                      <input type="checkbox" id="imageRenderOverlay" checked />
+                      <span>Trả ảnh đã thay chữ (beta)</span>
+                    </label>
+
+                    <button
+                      id="imageDownloadBtn"
+                      class="btn-secondary"
+                      style="display: none"
+                      onclick="downloadTranslatedImage()"
+                    >
+                      <i class="fas fa-download"></i> Tải ảnh đã dịch
+                    </button>
+                  </div>
+
+                  <div style="margin-top: 10px">
+                    <img
+                      id="imageTranslatedPreview"
+                      alt="Translated Preview"
+                      style="
+                        max-width: 100%;
+                        border-radius: 12px;
+                        display: none;
+                      "
+                    />
+                  </div>
+
+                  <div
+                    style="
+                      margin-top: 10px;
+                      display: grid;
+                      grid-template-columns: 1fr;
+                      gap: 10px;
+                    "
+                  >
+                    <div>
+                      <h4 style="margin: 6px 0">Chữ OCR</h4>
+                      <textarea
+                        id="imageOcrText"
+                        style="width: 100%; min-height: 90px"
+                        readonly
+                      ></textarea>
+                    </div>
+                    <div>
+                      <h4 style="margin: 6px 0">Bản dịch</h4>
+                      <textarea
+                        id="imageTranslatedText"
+                        style="width: 100%; min-height: 90px"
+                        readonly
+                      ></textarea>
+                    </div>
+                  </div>
+                </div>
+                <div class="upload-controls" style="margin-top: 10px">
+                  <select
+                    id="imageSourceLang"
+                    class="lang-select"
+                    data-autodetect="true"
+                    data-autodetect-label="Tự động (Auto-detect)"
+                    data-placeholder="Ngôn ngữ nguồn"
+                  ></select>
+                  <select
+                    id="imageTargetLang"
+                    class="lang-select"
+                    data-placeholder="Ngôn ngữ đích"
+                    data-default="vi"
+                  ></select>
+                  <button
+                    id="imageTranslateBtn"
+                    class="btn-primary"
+                    onclick="uploadImageForTranslation()"
+                  >
+                    <i class="fas fa-magic"></i>
+                    <span id="imageTranslateBtnText">OCR & Dịch</span>
+                    <div
+                      id="imageTranslateBtnLoading"
+                      class="btn-loading"
+                      style="display: none"
+                    >
+                      <div class="spinner"></div>
+                    </div>
+                  </button>
+                  <button class="btn-secondary" onclick="clearImage()">
+                    <i class="fas fa-times"></i> Xóa
+                  </button>
+                </div>
               </div>
-              <div class="pagination">
-                <button id="prevPage" onclick="changePage(-1)">Trước</button>
-                <span id="pageInfo">Trang 1</span>
-                <button id="nextPage" onclick="changePage(1)">Sau</button>
+
+              <div id="imageError" class="error-message" style="display: none">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span id="imageErrorText"></span>
               </div>
             </div>
           </div>
@@ -443,6 +590,13 @@
                     class="lang-select"
                     data-placeholder="Ngôn ngữ đích"
                   ></select>
+                  <label
+                    class="toggle small"
+                    title="Chỉ áp dụng cho Word (.docx). Cần cài Tesseract OCR trên máy chủ để OCR hoạt động."
+                  >
+                    <input type="checkbox" id="uploadDocxOcrImages" />
+                    <span>Dịch chữ trong ảnh (Word)</span>
+                  </label>
                   <button
                     id="uploadBtn"
                     class="btn-primary"

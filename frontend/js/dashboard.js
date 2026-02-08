@@ -319,18 +319,22 @@ class TranslationManager {
 
     const updateCharCount = () => {
       let text = "";
-      if (richToggle && richToggle.checked && richInput) text = richInput.innerText || "";
+      if (richToggle && richToggle.checked && richInput)
+        text = richInput.innerText || "";
       else if (inputText) text = inputText.value || "";
       const count = text.length;
       charCount.textContent = count;
-      charCount.style.color = count > 5000 ? "#00A8FF" : "rgba(255,255,255,0.7)";
+      charCount.style.color =
+        count > 5000 ? "#00A8FF" : "rgba(255,255,255,0.7)";
     };
 
     if (inputText) inputText.addEventListener("input", updateCharCount);
     if (richInput) {
       richInput.addEventListener("input", (e) => {
         updateCharCount();
-        try { richInput.dataset._isPristine = 'false'; } catch (er) {}
+        try {
+          richInput.dataset._isPristine = "false";
+        } catch (er) {}
       });
     }
 
@@ -348,7 +352,10 @@ class TranslationManager {
       tmp.innerHTML = (html || "").replace(/<br\s*\/?>(\s*)/gi, "<br />");
       // Then read textContent to get proper unescaped text with newlines
       // Replace <br> tags with newline characters
-      const withLineBreaks = String(tmp.innerHTML).replace(/<br\s*\/?>/gi, "\n");
+      const withLineBreaks = String(tmp.innerHTML).replace(
+        /<br\s*\/?>/gi,
+        "\n",
+      );
       tmp.innerHTML = withLineBreaks;
       return tmp.textContent || tmp.innerText || "";
     };
@@ -360,7 +367,7 @@ class TranslationManager {
       if (storedHtml) {
         richInput.innerHTML = storedHtml;
         // Mark as not pristine because stored HTML implies user edited it before
-        richInput.dataset._isPristine = 'false';
+        richInput.dataset._isPristine = "false";
         return;
       }
 
@@ -368,7 +375,7 @@ class TranslationManager {
       const plain = inputText.value || "";
       // Save original plain for exact restoration if user doesn't edit the rich contents
       richInput.dataset._plainOriginal = plain;
-      richInput.dataset._isPristine = 'true';
+      richInput.dataset._isPristine = "true";
       // Use escaped content inside a pre-wrap container so it appears visually identical
       richInput.innerHTML = `<div class="plain-preserve" style="white-space: pre-wrap;">${escapeForHTML(plain)}</div>`;
     };
@@ -408,11 +415,18 @@ class TranslationManager {
           inputText.style.display = "block";
           toolbar && (toolbar.style.display = "none");
           // If the rich content is still pristine (user didn't edit it), restore original plaintext exactly
-          if (richInput && richInput.dataset && richInput.dataset._isPristine === 'true' && richInput.dataset._plainOriginal !== undefined) {
+          if (
+            richInput &&
+            richInput.dataset &&
+            richInput.dataset._isPristine === "true" &&
+            richInput.dataset._plainOriginal !== undefined
+          ) {
             inputText.value = richInput.dataset._plainOriginal;
           } else {
             // Otherwise convert edited HTML to plain text reliably
-            inputText.value = richInput ? htmlToPlainText(richInput.innerHTML) : inputText.value;
+            inputText.value = richInput
+              ? htmlToPlainText(richInput.innerHTML)
+              : inputText.value;
           }
           // Disable preserve formatting when rich editor is off
           if (preserveCheck) {
@@ -426,17 +440,20 @@ class TranslationManager {
       // Initialize state: if preserve is checked, ensure rich editor is on
       if (preserveCheck && preserveCheck.checked && !richToggle.checked) {
         richToggle.checked = true;
-        richToggle.dispatchEvent(new Event('change'));
+        richToggle.dispatchEvent(new Event("change"));
       }
     }
 
     // If user checks 'preserve formatting' while rich is off, auto-enable rich editor
     if (preserveCheck) {
-      preserveCheck.addEventListener('change', (e) => {
+      preserveCheck.addEventListener("change", (e) => {
         if (e.target.checked && richToggle && !richToggle.checked) {
           richToggle.checked = true;
-          richToggle.dispatchEvent(new Event('change'));
-          UIManager.showNotification('Bật Rich editor để giữ định dạng', 'info');
+          richToggle.dispatchEvent(new Event("change"));
+          UIManager.showNotification(
+            "Bật Rich editor để giữ định dạng",
+            "info",
+          );
         }
         // if user unchecks preserve while rich on, clear stored html
         if (!e.target.checked && richInput && richInput.dataset._lastHtml) {
@@ -482,7 +499,8 @@ class TranslationManager {
     }
 
     // hide toolbar initially if not active
-    if (toolbar && (!richToggle || !richToggle.checked)) toolbar.style.display = "none";
+    if (toolbar && (!richToggle || !richToggle.checked))
+      toolbar.style.display = "none";
   }
 
   async translateText() {
@@ -638,7 +656,7 @@ class TranslationManager {
   decodeHTMLEntities(s) {
     if (!s) return "";
     try {
-      const txt = document.createElement('textarea');
+      const txt = document.createElement("textarea");
       txt.innerHTML = s;
       return txt.value;
     } catch (e) {
@@ -654,11 +672,26 @@ class TranslationManager {
 
     // If result is HTML or user requested preserve, render as HTML in preview (try decode entities then sanitize)
     if (isHtml || preserve) {
-      const decoded = this.decodeHTMLEntities(translatedText);
-      const sanitized = this.sanitizeHTML(decoded);
-      if (previewPane) previewPane.innerHTML = sanitized || "<em>Không có kết quả</em>";
-      // For plain text output area, also show stripped text
-      outputDiv.textContent = (decoded || "").replace(/<[^>]*>/g, "");
+      let html = String(translatedText || "");
+      // Only decode entities if the whole result looks like escaped HTML (e.g. &lt;p&gt;...)
+      // Decoding unconditionally can break content like "5 &lt; 10" by turning it into a broken tag.
+      const hasRealTags = /<\s*[a-zA-Z][^>]*>/.test(html);
+      const looksLikeEscapedHtml =
+        /&lt;\s*[a-zA-Z][^&]*&gt;/.test(html) && !hasRealTags;
+      if (looksLikeEscapedHtml) {
+        html = this.decodeHTMLEntities(html);
+      }
+
+      const sanitized = this.sanitizeHTML(html);
+      if (previewPane)
+        previewPane.innerHTML = sanitized || "<em>Không có kết quả</em>";
+
+      // For plain text output area, derive text via DOM parsing (avoid regex stripping that can drop characters)
+      if (outputDiv) {
+        const tmp = document.createElement("div");
+        tmp.innerHTML = sanitized;
+        outputDiv.textContent = tmp.textContent || tmp.innerText || "";
+      }
     } else {
       outputDiv.textContent = translatedText;
       if (previewPane) {
@@ -757,6 +790,8 @@ class HistoryManager {
   }
 
   async loadHistory(page = 1, filter = "all", date = "") {
+    // History tab might be removed from the UI; don't error if elements are missing.
+    if (!document.getElementById("historyList")) return;
     this.currentPage = page;
     this.currentFilter = filter;
     this.currentDate = date || "";
@@ -807,6 +842,7 @@ class HistoryManager {
 
   renderHistory(translations) {
     const historyList = document.getElementById("historyList");
+    if (!historyList) return;
 
     if (translations.length === 0) {
       historyList.innerHTML =
@@ -849,6 +885,8 @@ class HistoryManager {
     const prevBtn = document.getElementById("prevPage");
     const nextBtn = document.getElementById("nextPage");
 
+    if (!pageInfo || !prevBtn || !nextBtn) return;
+
     pageInfo.textContent = `Trang ${currentPage} / ${totalPages}`;
     prevBtn.disabled = currentPage <= 1;
     nextBtn.disabled = currentPage >= totalPages;
@@ -862,7 +900,9 @@ class HistoryManager {
   }
 
   filterHistory() {
-    const filter = document.getElementById("historyFilter").value;
+    const historyFilter = document.getElementById("historyFilter");
+    if (!historyFilter) return;
+    const filter = historyFilter.value;
     const date = (document.getElementById("dateFilter") || {}).value || "";
     this.loadHistory(1, filter, date);
   }
@@ -878,7 +918,11 @@ class FileUploadManager {
 
   setupFileUpload() {
     const fileInput = document.getElementById("fileInput");
-    const uploadArea = document.querySelector(".upload-area");
+    // There are multiple ".upload-area" elements (OCR image + document upload).
+    // Scope to the document upload tab to avoid binding handlers to the wrong area.
+    const uploadArea = document.querySelector("#upload-tab .upload-area");
+
+    if (!fileInput || !uploadArea) return;
 
     // Click to select file
     uploadArea.addEventListener("click", (e) => {
@@ -978,6 +1022,22 @@ class FileUploadManager {
     const formData = new FormData();
     formData.append("file", this.selectedFile);
     formData.append("target_lang", targetLang);
+
+    // Optional: OCR images embedded in Word (.docx)
+    try {
+      const ocrToggle = document.getElementById("uploadDocxOcrImages");
+      const isDocx =
+        (this.selectedFile &&
+          (this.selectedFile.type ===
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+            String(this.selectedFile.name || "").toLowerCase().endsWith(".docx"))) ||
+        false;
+      if (ocrToggle && ocrToggle.checked && isDocx) {
+        formData.append("ocr_images", "1");
+      }
+    } catch (e) {
+      // ignore
+    }
 
     try {
       const response = await fetch("/api/translation/document", {
@@ -1106,6 +1166,328 @@ class FileUploadManager {
   }
 }
 
+// Image OCR Upload Manager
+class ImageOcrManager {
+  constructor(authManager) {
+    this.auth = authManager;
+    this.selectedImage = null;
+    this.objectUrl = null;
+    this.setupImageUpload();
+  }
+
+  setupImageUpload() {
+    const imageInput = document.getElementById("imageInput");
+    const imageArea = document.getElementById("imageUploadArea");
+    if (!imageInput || !imageArea) return;
+
+    const isOcrTabActive = () => {
+      const imageTab = document.getElementById("image-tab");
+      return !!(imageTab && imageTab.classList.contains("active"));
+    };
+
+    const tryGetImageFileFromClipboard = (clipboardData) => {
+      const items = clipboardData && clipboardData.items;
+      if (!items) return null;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (!it) continue;
+
+        // Typical case: clipboard exposes the pasted bitmap as image/*
+        if (it.type && it.type.startsWith("image/")) {
+          const f = it.getAsFile && it.getAsFile();
+          if (f) return f;
+        }
+
+        // Some environments expose a file-kind item with missing/empty type
+        if (it.kind === "file") {
+          const f = it.getAsFile && it.getAsFile();
+          if (f && f.type && f.type.startsWith("image/")) return f;
+        }
+      }
+      return null;
+    };
+
+    // Paste image from clipboard (Ctrl+V) when OCR tab is active
+    const onPaste = async (e) => {
+      try {
+        // Only handle image paste when the OCR tab is active.
+        // This avoids breaking normal paste behavior in text inputs on other tabs.
+        if (!isOcrTabActive()) return;
+
+        let file = tryGetImageFileFromClipboard(e.clipboardData);
+
+        // Fallback: some environments don't populate clipboardData.items for images.
+        // Try the async Clipboard API if available.
+        if (!file && navigator.clipboard && navigator.clipboard.read) {
+          try {
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+              for (const type of item.types || []) {
+                if (type && type.startsWith("image/")) {
+                  const blob = await item.getType(type);
+                  file = new File(
+                    [blob],
+                    `pasted-image.${type.split("/")[1] || "png"}`,
+                    { type },
+                  );
+                  break;
+                }
+              }
+              if (file) break;
+            }
+          } catch (clipErr) {
+            // Ignore permission errors and fall back to default paste
+          }
+        }
+
+        if (!file) return;
+        e.preventDefault();
+        this.handleImageSelect(file);
+        UIManager.showNotification("Đã dán ảnh từ clipboard", "success");
+      } catch (err) {
+        // ignore
+      }
+    };
+
+    // Listen globally so paste works even if the area isn't focused
+    document.addEventListener("paste", onPaste);
+
+    // Click to select
+    imageArea.addEventListener("click", (e) => {
+      if (
+        e.target === imageArea ||
+        e.target.closest(".upload-icon") ||
+        e.target.tagName === "H3" ||
+        e.target.tagName === "P"
+      ) {
+        imageInput.click();
+      }
+    });
+
+    // Also allow pasting while the OCR area is focused
+    imageArea.addEventListener("paste", onPaste);
+
+    // Drag & drop
+    imageArea.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      imageArea.classList.add("drag-over");
+    });
+    imageArea.addEventListener("dragleave", () => {
+      imageArea.classList.remove("drag-over");
+    });
+    imageArea.addEventListener("drop", (e) => {
+      e.preventDefault();
+      imageArea.classList.remove("drag-over");
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) this.handleImageSelect(files[0]);
+    });
+
+    imageInput.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        this.handleImageSelect(e.target.files[0]);
+      }
+    });
+  }
+
+  handleImageSelect(file) {
+    const maxSize = 15 * 1024 * 1024; // 15MB
+    if (!file || !file.type || !file.type.startsWith("image/")) {
+      UIManager.showNotification("File không phải hình ảnh.", "error");
+      return;
+    }
+    if (file.size > maxSize) {
+      UIManager.showNotification("Ảnh quá lớn. Giới hạn 15MB.", "error");
+      return;
+    }
+
+    this.selectedImage = file;
+    this.showImageInfo(file);
+  }
+
+  showImageInfo(file) {
+    const info = document.getElementById("imageInfo");
+    const nameEl = document.getElementById("imageName");
+    const sizeEl = document.getElementById("imageSize");
+    const preview = document.getElementById("imagePreview");
+    const err = document.getElementById("imageError");
+    if (err) err.style.display = "none";
+
+    if (nameEl) nameEl.textContent = file.name;
+    if (sizeEl)
+      sizeEl.textContent = `(${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+    if (info) info.style.display = "block";
+
+    try {
+      if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = URL.createObjectURL(file);
+      if (preview) {
+        preview.src = this.objectUrl;
+        preview.style.display = "block";
+      }
+    } catch (e) {
+      // ignore preview errors
+    }
+  }
+
+  showImageError(message) {
+    const err = document.getElementById("imageError");
+    const txt = document.getElementById("imageErrorText");
+    if (txt) txt.textContent = message;
+    if (err) err.style.display = "block";
+  }
+
+  clearImage() {
+    const imageInput = document.getElementById("imageInput");
+    const info = document.getElementById("imageInfo");
+    const preview = document.getElementById("imagePreview");
+    const result = document.getElementById("imageResult");
+    const ocrText = document.getElementById("imageOcrText");
+    const translatedText = document.getElementById("imageTranslatedText");
+    const translatedPreview = document.getElementById("imageTranslatedPreview");
+    const downloadBtn = document.getElementById("imageDownloadBtn");
+    const err = document.getElementById("imageError");
+    if (err) err.style.display = "none";
+    if (info) info.style.display = "none";
+    if (imageInput) imageInput.value = "";
+    if (preview) {
+      preview.src = "";
+      preview.style.display = "none";
+    }
+    if (translatedPreview) {
+      translatedPreview.src = "";
+      translatedPreview.style.display = "none";
+    }
+    if (ocrText) ocrText.value = "";
+    if (translatedText) translatedText.value = "";
+    if (downloadBtn) downloadBtn.style.display = "none";
+    if (result) result.style.display = "none";
+    if (this.objectUrl) {
+      try {
+        URL.revokeObjectURL(this.objectUrl);
+      } catch (e) {}
+      this.objectUrl = null;
+    }
+    this.renderedImageDataUrl = null;
+    this.selectedImage = null;
+  }
+
+  async uploadImageForTranslation() {
+    if (!this.selectedImage) {
+      this.showImageError("Vui lòng chọn ảnh trước!");
+      return;
+    }
+
+    // Ensure user is authenticated
+    if (!this.auth.isAuthenticated()) {
+      this.showImageError("Vui lòng đăng nhập để sử dụng OCR & dịch!");
+      setTimeout(() => this.auth.redirectToLogin(), 800);
+      return;
+    }
+
+    const sourceLang =
+      (document.getElementById("imageSourceLang") || {}).value || "auto";
+    const targetLang =
+      (document.getElementById("imageTargetLang") || {}).value || "";
+    if (!targetLang) {
+      this.showImageError("Vui lòng chọn ngôn ngữ đích!");
+      return;
+    }
+
+    const btn = document.getElementById("imageTranslateBtn");
+    const btnText = document.getElementById("imageTranslateBtnText");
+    const btnLoading = document.getElementById("imageTranslateBtnLoading");
+
+    if (btnText) btnText.textContent = "Đang OCR...";
+    if (btnLoading) btnLoading.style.display = "inline-block";
+    if (btn) btn.disabled = true;
+
+    const formData = new FormData();
+    formData.append("file", this.selectedImage);
+    formData.append("source_lang", sourceLang);
+    formData.append("target_lang", targetLang);
+    const renderToggle = document.getElementById("imageRenderOverlay");
+    const renderOverlay = !!(renderToggle && renderToggle.checked);
+    formData.append("render", renderOverlay ? "1" : "0");
+
+    try {
+      const resp = await fetch("/api/translation/image", {
+        method: "POST",
+        headers: this.auth.getAuthHeaders(),
+        body: formData,
+      });
+
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data.error || data.message || "OCR & dịch thất bại.");
+      }
+
+      // Show results inside the OCR tab (do NOT switch tabs and do NOT overwrite text-translation input)
+      const result = document.getElementById("imageResult");
+      const ocrText = document.getElementById("imageOcrText");
+      const translatedText = document.getElementById("imageTranslatedText");
+      const translatedPreview = document.getElementById(
+        "imageTranslatedPreview",
+      );
+      const downloadBtn = document.getElementById("imageDownloadBtn");
+
+      if (ocrText) ocrText.value = data.ocr_text || "";
+      if (translatedText) translatedText.value = data.translated_text || "";
+
+      this.renderedImageDataUrl = data.rendered_image || null;
+      if (translatedPreview) {
+        if (this.renderedImageDataUrl) {
+          translatedPreview.src = this.renderedImageDataUrl;
+          translatedPreview.style.display = "block";
+        } else {
+          translatedPreview.src = "";
+          translatedPreview.style.display = "none";
+        }
+      }
+      if (downloadBtn) {
+        downloadBtn.style.display = this.renderedImageDataUrl
+          ? "inline-block"
+          : "none";
+      }
+      if (result) result.style.display = "block";
+
+      UIManager.showNotification(
+        this.renderedImageDataUrl
+          ? "Đã dịch ảnh (đã thay chữ)"
+          : "OCR & dịch hoàn tất",
+        "success",
+      );
+
+      // Reload stats and history
+      dashboard.stats.loadStats();
+      dashboard.history.loadHistory();
+    } catch (e) {
+      console.error("Image OCR error", e);
+      this.showImageError(e.message || "Có lỗi khi OCR ảnh.");
+    } finally {
+      if (btnText) btnText.textContent = "OCR & Dịch";
+      if (btnLoading) btnLoading.style.display = "none";
+      if (btn) btn.disabled = false;
+    }
+  }
+}
+
+function downloadTranslatedImage() {
+  try {
+    if (!dashboard || !dashboard.ocr || !dashboard.ocr.renderedImageDataUrl) {
+      UIManager.showNotification("Chưa có ảnh đã dịch để tải.", "error");
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = dashboard.ocr.renderedImageDataUrl;
+    a.download = "translated_image.png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (e) {
+    UIManager.showNotification("Không tải được ảnh.", "error");
+  }
+}
+
 // Dashboard Stats Manager
 class DashboardStatsManager {
   constructor(authManager) {
@@ -1182,6 +1564,7 @@ class DashboardController {
     this.translation = new TranslationManager(this.auth);
     this.history = new HistoryManager(this.auth);
     this.upload = new FileUploadManager(this.auth);
+    this.ocr = new ImageOcrManager(this.auth);
     this.stats = new DashboardStatsManager(this.auth);
 
     this.init();
@@ -1511,6 +1894,14 @@ function closeNotification() {
 
 function clearFile() {
   dashboard.upload.resetUpload();
+}
+
+function uploadImageForTranslation() {
+  dashboard.ocr.uploadImageForTranslation();
+}
+
+function clearImage() {
+  dashboard.ocr.clearImage();
 }
 
 function downloadResult() {

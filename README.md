@@ -27,6 +27,12 @@ Hệ thống dịch văn bản và tài liệu sử dụng trí tuệ nhân tạ
 - Quản lý và xóa lịch sử
 - Hiển thị thời gian thực
 
+### 🖼️ Dịch Ảnh (OCR)
+
+- Upload hoặc dán ảnh (Ctrl+V) để OCR lấy chữ
+- Dịch kết quả OCR như văn bản bình thường
+- Khuyến nghị cấu hình `OCR_LANGS_DEFAULT=eng+vie` cho ảnh tiếng Việt
+
 ### 🔐 Bảo Mật & Xác Thực
 
 - Đăng nhập Google OAuth
@@ -99,6 +105,25 @@ python -m http.server 8000  # Hoặc dùng Live Server extension
 - Frontend: http://localhost:80 hoặc http://localhost:8000
 - Backend API: http://localhost:5000
 - Database: localhost:3306
+
+## 🧩 Cấu hình OCR (Tesseract)
+
+OCR dùng `pytesseract` nhưng máy bạn cần cài thêm **Tesseract OCR** (binary) thì mới chạy được.
+
+### Windows
+
+- Cài Tesseract OCR
+- Sau khi cài, làm 1 trong 2 cách:
+  - Thêm Tesseract vào `PATH` (mở terminal mới sau khi thêm PATH)
+  - Hoặc set biến trong `backend/.env`:
+
+```env
+# Ví dụ Windows
+TESSERACT_CMD=C:\\Program Files\\Tesseract-OCR\\tesseract.exe
+OCR_LANGS_DEFAULT=eng+vie
+```
+
+Nếu OCR báo thiếu ngôn ngữ `vie`, hãy đảm bảo language data tiếng Việt được cài kèm trong Tesseract.
 
 ## 🔧 Cấu Hình API Keys
 

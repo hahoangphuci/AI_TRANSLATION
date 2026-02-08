@@ -2,7 +2,8 @@ import os
 from dotenv import load_dotenv
 
 # Load .env từ thư mục backend (config.py nằm trong backend/)
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+# override=True so edits to backend/.env take effect even if variables exist in OS env
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')

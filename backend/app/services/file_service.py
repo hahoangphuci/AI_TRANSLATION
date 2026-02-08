@@ -2,6 +2,9 @@ import os
 import re
 import unicodedata
 import time
+import uuid
+import io
+import zipfile
 import PyPDF2
 import docx
 import openpyxl
@@ -20,8 +23,11 @@ class ProviderRateLimitError(Exception):
     pass
 
 class FileService:
-    def __init__(self, translator=None):
-        """translator: callable(text, source_lang, target_lang) -> translated_text"""
+    def __init__(self, translator=None, ocr_image_to_text=None, ocr_translate_overlay=None):
+        """translator: callable(text, source_lang, target_lang) -> translated_text
+
+        ocr_image_to_text: optional callable(image_path, ocr_langs=None) -> text
+        """
         from concurrent.futures import ThreadPoolExecutor
 
         self.upload_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'uploads')
@@ -29,6 +35,8 @@ class FileService:
         os.makedirs(self.upload_folder, exist_ok=True)
         os.makedirs(self.download_folder, exist_ok=True)
         self.translator = translator
+        self.ocr_image_to_text = ocr_image_to_text
+        self.ocr_translate_overlay = ocr_translate_overlay
         # Performance tuning
         try:
             from app import config as app_config
@@ -80,14 +88,14 @@ class FileService:
         raise last
 
     
-    def process_document(self, file_path, target_lang, progress_callback=None):
+    def process_document(self, file_path, target_lang, progress_callback=None, *, ocr_images=False, ocr_langs=None):
         filename = os.path.basename(file_path)
         name, ext = os.path.splitext(filename)
         
         if ext.lower() == '.pdf':
             return self._process_pdf(file_path, target_lang, progress_callback)
         elif ext.lower() == '.docx':
-            return self._process_docx(file_path, target_lang, progress_callback)
+            return self._process_docx(file_path, target_lang, progress_callback, ocr_images=ocr_images, ocr_langs=ocr_langs)
         elif ext.lower() == '.xlsx':
             return self._process_xlsx(file_path, target_lang, progress_callback)
         elif ext.lower() == '.txt':
@@ -173,9 +181,138 @@ class FileService:
             progress_callback(100, "Completed")
         return output_path
     
-    def _process_docx(self, file_path, target_lang, progress_callback=None):
+    def _process_docx(self, file_path, target_lang, progress_callback=None, *, ocr_images=False, ocr_langs=None):
         # Modify original document in-place so styles/images/relationships are preserved
         doc = docx.Document(file_path)
+
+        def iter_all_paragraphs(document):
+            paras = []
+            try:
+                paras.extend(list(document.paragraphs))
+            except Exception:
+                pass
+            try:
+                for table in document.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            paras.extend(list(cell.paragraphs))
+            except Exception:
+                pass
+            try:
+                for section in document.sections:
+                    paras.extend(list(section.header.paragraphs))
+                    paras.extend(list(section.footer.paragraphs))
+            except Exception:
+                pass
+            return paras
+
+        def paragraph_image_rids(paragraph):
+            # Return relationship ids (rIdX) for images embedded in this paragraph.
+            rids = []
+            try:
+                runs = list(paragraph.runs)
+            except Exception:
+                runs = []
+            if not runs:
+                return rids
+
+            # Use a namespace-agnostic xpath for blips (image references)
+            rel_attr = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed'
+            for run in runs:
+                try:
+                    blips = run._element.xpath('.//*[local-name()="blip"]')
+                except Exception:
+                    blips = []
+                for blip in blips:
+                    try:
+                        rid = blip.get(rel_attr)
+                    except Exception:
+                        rid = None
+                    if rid:
+                        rids.append(rid)
+            # Preserve order but de-dup
+            seen = set()
+            out = []
+            for rid in rids:
+                if rid in seen:
+                    continue
+                seen.add(rid)
+                out.append(rid)
+            return out
+
+        def rid_to_image_part(paragraph, rid):
+            try:
+                part = paragraph.part
+                # python-docx keeps a mapping of related parts by rId
+                related = getattr(part, 'related_parts', None)
+                if isinstance(related, dict) and rid in related:
+                    return related[rid]
+            except Exception:
+                pass
+            try:
+                # Fallback: via relationship object
+                rels = getattr(paragraph.part, 'rels', None)
+                if rels and rid in rels:
+                    return rels[rid].target_part
+            except Exception:
+                pass
+            return None
+
+        def image_part_ext(image_part):
+            # Try best-effort extension resolution
+            try:
+                partname = str(getattr(image_part, 'partname', '') or '')
+                base = os.path.basename(partname)
+                ext = os.path.splitext(base)[1].lower()
+                if ext:
+                    return ext
+            except Exception:
+                pass
+            try:
+                ct = str(getattr(image_part, 'content_type', '') or '').lower()
+                mapping = {
+                    'image/png': '.png',
+                    'image/jpeg': '.jpg',
+                    'image/jpg': '.jpg',
+                    'image/gif': '.gif',
+                    'image/bmp': '.bmp',
+                    'image/tiff': '.tif',
+                    'image/webp': '.webp',
+                }
+                return mapping.get(ct, '.png')
+            except Exception:
+                return '.png'
+
+        def _overlay_bytes_to_original_format(png_bytes: bytes, desired_ext: str) -> bytes:
+            """Convert PNG bytes (rendered overlay) to match the original image extension."""
+            desired_ext = (desired_ext or '.png').lower()
+            try:
+                from PIL import Image
+            except Exception:
+                # If Pillow is not available, return PNG bytes as-is.
+                return png_bytes
+
+            fmt_map = {
+                '.png': 'PNG',
+                '.jpg': 'JPEG',
+                '.jpeg': 'JPEG',
+                '.bmp': 'BMP',
+                '.tif': 'TIFF',
+                '.tiff': 'TIFF',
+                '.webp': 'WEBP',
+                '.gif': 'PNG',  # avoid animated GIF issues
+            }
+            out_fmt = fmt_map.get(desired_ext, 'PNG')
+            try:
+                img = Image.open(io.BytesIO(png_bytes))
+                if out_fmt in ('JPEG', 'BMP', 'TIFF'):
+                    if img.mode not in ('RGB', 'L'):
+                        img = img.convert('RGB')
+                buf = io.BytesIO()
+                img.save(buf, format=out_fmt)
+                return buf.getvalue()
+            except Exception:
+                return png_bytes
 
         def distribute_text_to_runs(translated: str, runs_texts):
             """
@@ -298,6 +435,88 @@ class FileService:
             # ignore headers/footers issues
             pass
 
+        # Optional: OCR embedded images in DOCX and insert translated text after the image paragraph.
+        if ocr_images and self.ocr_translate_overlay:
+            if progress_callback:
+                progress_callback(82, "OCR images in DOCX...")
+
+            paras_to_scan = iter_all_paragraphs(doc)
+            total_paras = len(paras_to_scan) or 1
+            ocr_attempted = 0
+            ocr_success = 0
+            ocr_disabled = False
+
+            # Collect replacements: zip internal path -> bytes
+            image_replacements = {}
+
+            for idx, para in enumerate(paras_to_scan):
+                if ocr_disabled:
+                    break
+                rids = paragraph_image_rids(para)
+                if not rids:
+                    continue
+                for rid in rids:
+                    img_part = rid_to_image_part(para, rid)
+                    if not img_part:
+                        continue
+                    try:
+                        blob = getattr(img_part, 'blob', None)
+                        if not blob:
+                            continue
+
+                        ext = image_part_ext(img_part)
+                        tmp_name = f"docx_img_{uuid.uuid4().hex}{ext}"
+                        tmp_path = os.path.join(self.upload_folder, tmp_name)
+                        with open(tmp_path, 'wb') as f:
+                            f.write(blob)
+
+                        ocr_attempted += 1
+                        try:
+                            # Render translated text back onto the image.
+                            # Returns (ocr_text, translated_text, png_bytes)
+                            ocr_text, translated_text, png_bytes = self.ocr_translate_overlay(
+                                tmp_path,
+                                'auto',
+                                target_lang,
+                                ocr_langs,
+                            )
+                        finally:
+                            try:
+                                os.remove(tmp_path)
+                            except Exception:
+                                pass
+
+                        if not ocr_text or not str(ocr_text).strip():
+                            continue
+
+                        if png_bytes and len(png_bytes) > 100:
+                            # Replace the original embedded image bytes in the resulting docx.
+                            try:
+                                partname = str(getattr(img_part, 'partname', '') or '').lstrip('/')
+                                if partname:
+                                    new_bytes = _overlay_bytes_to_original_format(png_bytes, ext)
+                                    image_replacements[partname] = new_bytes
+                                    ocr_success += 1
+                            except Exception:
+                                continue
+                    except Exception as e:
+                        # If Tesseract is missing/unavailable, stop trying further images to avoid repeated failures.
+                        msg = str(e).lower()
+                        if 'tesseract' in msg and ('not installed' in msg or 'path' in msg):
+                            ocr_disabled = True
+                            if progress_callback:
+                                progress_callback(85, "Skipping DOCX image OCR (tesseract not available)")
+                            break
+                        # Otherwise, continue best-effort.
+                        continue
+
+                if progress_callback and (idx % 10 == 0):
+                    # Keep progress moving while OCR runs
+                    progress_callback(82 + int((idx / total_paras) * 10), f"OCR scanning {idx+1}/{total_paras}")
+
+            if progress_callback:
+                progress_callback(92, f"DOCX OCR done ({ocr_success}/{max(1, ocr_attempted)} images)" )
+
         # Ensure output filename has .docx extension
         output_filename = f"translated_{os.path.basename(file_path)}"
         if not output_filename.lower().endswith('.docx'):
@@ -306,6 +525,34 @@ class FileService:
 
         # Save and validate
         doc.save(output_path)
+
+        # If we rendered overlays, patch the embedded image bytes inside the saved DOCX (zip container)
+        try:
+            if ocr_images and 'image_replacements' in locals() and image_replacements:
+                if progress_callback:
+                    progress_callback(93, "Applying translated overlays to DOCX images...")
+                tmp_out = output_path + ".tmp"
+                with zipfile.ZipFile(output_path, 'r') as zin, zipfile.ZipFile(tmp_out, 'w') as zout:
+                    for item in zin.infolist():
+                        data = zin.read(item.filename)
+                        repl = image_replacements.get(item.filename)
+                        if repl is not None:
+                            data = repl
+                        zout.writestr(item, data)
+                # Replace original
+                try:
+                    os.replace(tmp_out, output_path)
+                except Exception:
+                    # Best-effort fallback
+                    try:
+                        os.remove(output_path)
+                    except Exception:
+                        pass
+                    os.rename(tmp_out, output_path)
+        except Exception as e:
+            # If patching fails, keep the DOCX as saved (text translations still present)
+            if progress_callback:
+                progress_callback(94, f"DOCX image overlay patch failed: {e}")
 
 
         # Validate produced DOCX — if invalid, write a plain text fallback to avoid corrupt file being returned
